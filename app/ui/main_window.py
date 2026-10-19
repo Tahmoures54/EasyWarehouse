@@ -19,7 +19,6 @@ from app.ui.forms.product_form import ProductForm
 from app.ui.widgets.table_view import TxTable
 from app.ui.help_window import HelpWindow
 from app.ui.about_window import AboutWindow
-from app.services.seed import seed_if_empty
 
 
 class MainWindow(tk.Tk):
@@ -35,7 +34,6 @@ class MainWindow(tk.Tk):
 
         try:
             self.db = DB()
-            seed_if_empty(self.db)
         except DatabaseError as exc:
             messagebox.showerror("خطای دیتابیس", str(exc))
             self.destroy()
