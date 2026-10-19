@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, Tuple, Union
 
@@ -46,7 +47,7 @@ class DB:
         if not schema_file.exists():
             raise DatabaseError("فایل schema.sql یافت نشد.")
         try:
-            with self._connect() as conn:
+            with closing(self._connect()) as conn:
                 conn.executescript(schema_file.read_text(encoding="utf-8"))
                 cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
                 if "category" not in cols:
