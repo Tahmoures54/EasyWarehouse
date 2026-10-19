@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable, Optional
@@ -12,9 +13,14 @@ from app.models.product import Product
 from app.services.product_service import ProductService
 from app.ui import theme as T
 
+logger = logging.getLogger(__name__)
+
 
 class ProductForm(tk.Toplevel):
-    """دیالوگ کالای جدید یا ویرایش."""
+    """دیالوگ افزودن یا ویرایش کالا."""
+
+    WIDTH = 460
+    HEIGHT = 360
 
     def __init__(
         self,
@@ -27,107 +33,203 @@ class ProductForm(tk.Toplevel):
         self.service = service
         self.product = product
         self.on_save = on_save
-        self.title("ویرایش کالا" if product else "کالای جدید")
-        self.geometry("440x350")
+
+        # --- متغیرها ابتدا ساخته می‌شوند تا _save هرگز به متغیر نبوده برنخورد ---
+        self.user_code_var = tk.StringVar()
+        self.name_var = tk.StringVar()
+        self.unit_var = tk.StringVar(value="عدد")
+        self.min_var = tk.StringVar(value="0")
+        self.cat_var = tk.StringVar(value="مصرفی")
+        self.shelf_var = tk.StringVar()
+
+        self._configure_window(master)
+        self._build_form()
+        if product is not None:
+            self._load_product(product)
+        self._bind_shortcuts()
+
+    # ------------------------------------------------------------------ setup
+
+    def _configure_window(self, master: tk.Misc) -> None:
+        self.title("ویرایش کالا" if self.product else "کالای جدید")
         self.resizable(False, False)
         self.configure(bg=T.BG)
         self.transient(master)
+        self._center_on(master)
         self.grab_set()
-        self._build()
-        if product:
-            self.user_code_var.set(product.user_code or product.code)
-            self.name_var.set(product.name)
-            self.unit_var.set(product.unit)
-            self.min_var.set(self._fmt(product.min_stock))
-            self.cat_var.set(product.category)
-            self.shelf_var.set(product.shelf)
+
+    def _center_on(self, master: tk.Misc) -> None:
+        self.update_idletasks()
+        try:
+            mx, my = master.winfo_rootx(), master.winfo_rooty()
+            mw, mh = master.winfo_width(), master.winfo_height()
+        except tk.TclError:
+            mx = my = mw = mh = 0
+
+        if mw <= 1 or mh <= 1:  # والد هنوز نگاشت نشده — مرکز صفحه
+            x = (self.winfo_screenwidth() - self.WIDTH) // 2
+            y = (self.winfo_screenheight() - self.HEIGHT) // 2
+        else:
+            x = mx + (mw - self.WIDTH) // 2
+            y = my + (mh - self.HEIGHT) // 2
+        self.geometry(f"{self.WIDTH}x{self.HEIGHT}+{max(x, 0)}+{max(y, 0)}")
+
+    def _bind_shortcuts(self) -> None:
+        self.bind("<Escape>", lambda _e: self.destroy())
+
+    # ----------------------------------------------------------------- layout
+
+    def _build_form(self) -> None:
+        frame = ttk.Frame(self, padding=16)
+        frame.pack(fill=tk.BOTH, expand=True)
+        frame.columnconfigure(1, weight=1)
+
+        self._add_entry(frame, 0, "کد کالا:", self.user_code_var)
+        self._add_entry(frame, 1, "نام کالا:", self.name_var)
+
+        self._add_label(frame, 2, "واحد:")
+        ttk.Combobox(
+            frame, textvariable=self.unit_var, values=list(UNITS), width=30
+        ).grid(row=2, column=1, sticky="ew", pady=5)
+
+        self._add_entry(frame, 3, "حداقل موجودی:", self.min_var)
+
+        self._add_label(frame, 4, "دسته:")
+        ttk.Combobox(
+            frame,
+            textvariable=self.cat_var,
+            values=list(CATEGORIES),
+            state="readonly",
+            width=30,
+        ).grid(row=4, column=1, sticky="ew", pady=5)
+
+        self._add_entry(frame, 5, "قفسه:", self.shelf_var)
+
+        buttons = ttk.Frame(frame)
+        buttons.grid(row=6, column=0, columnspan=2, pady=16)
+        ttk.Button(
+            buttons, text="ذخیره", style="Primary.TButton", command=self._save, width=12
+        ).pack(side=tk.LEFT, padx=6)
+        ttk.Button(
+            buttons, text="انصراف", style="Secondary.TButton", command=self.destroy, width=10
+        ).pack(side=tk.LEFT, padx=6)
+
+    def _add_label(self, parent: ttk.Frame, row: int, text: str) -> ttk.Label:
+        label = ttk.Label(parent, text=text)
+        label.grid(row=row, column=0, sticky="e", pady=5, padx=4)
+        return label
+
+    def _add_entry(
+        self, parent: ttk.Frame, row: int, label: str, var: tk.StringVar
+    ) -> ttk.Entry:
+        self._add_label(parent, row, label)
+        entry = ttk.Entry(parent, textvariable=var, width=30)
+        entry.grid(row=row, column=1, sticky="ew", pady=5)
+        entry.bind("<Return>", lambda _e: self._save())
+        if row == 0:
+            self.after_idle(entry.focus_set)
+        return entry
+
+    def _load_product(self, product: Product) -> None:
+        self.user_code_var.set(product.user_code or product.code)
+        self.name_var.set(product.name)
+        self.unit_var.set(product.unit)
+        self.min_var.set(self._fmt(product.min_stock))
+        self.cat_var.set(product.category)
+        self.shelf_var.set(product.shelf)
+
+    # ---------------------------------------------------------------- helpers
 
     @staticmethod
-    def _fmt(v: float) -> str:
-        return str(int(v)) if v == int(v) else str(v)
+    def _fmt(value: float) -> str:
+        """نمایش فشرده عدد؛ بدون '.0' اضافی."""
+        try:
+            if float(value).is_integer():
+                return str(int(value))
+        except (TypeError, ValueError):
+            pass
+        return str(value)
 
-    def _build(self) -> None:
-        f = ttk.Frame(self, padding=16)
-        f.pack(fill=tk.BOTH, expand=True)
+    @staticmethod
+    def _coerce_min_stock(raw: str) -> float:
+        """تبدیل ورودی کاربر به عدد غیرمنفی؛ در صورت خطا ValueError با پیام فارسی."""
+        text = (raw or "").strip() or "0"
+        if text == "0":
+            return 0.0
 
-        ttk.Label(f, text="کد کالا:").grid(row=0, column=0, sticky="e", pady=5, padx=4)
-        self.user_code_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.user_code_var, width=30).grid(row=0, column=1, sticky="w", pady=5)
+        # import تنبل تا از چرخهٔ وابستگی بین سرویس‌ها جلوگیری شود
+        from app.services.transaction_service import parse_positive_qty
 
-        ttk.Label(f, text="نام کالا:").grid(row=1, column=0, sticky="e", pady=5, padx=4)
-        self.name_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.name_var, width=30).grid(row=1, column=1, sticky="w", pady=5)
+        try:
+            return parse_positive_qty(text)
+        except ValueError:
+            pass
 
-        ttk.Label(f, text="واحد:").grid(row=2, column=0, sticky="e", pady=5, padx=4)
-        self.unit_var = tk.StringVar(value="عدد")
-        ttk.Combobox(f, textvariable=self.unit_var, values=list(UNITS), width=28).grid(
-            row=2, column=1, sticky="w", pady=5
-        )
+        try:
+            value = float(text.replace(",", "."))
+        except ValueError as exc:
+            raise ValueError("حداقل موجودی باید عدد غیرمنفی باشد.") from exc
+        if value < 0:
+            raise ValueError("حداقل موجودی باید عدد غیرمنفی باشد.")
+        return value
 
-        ttk.Label(f, text="حداقل موجودی:").grid(row=3, column=0, sticky="e", pady=5, padx=4)
-        self.min_var = tk.StringVar(value="0")
-        ttk.Entry(f, textvariable=self.min_var, width=30).grid(row=3, column=1, sticky="w", pady=5)
-
-        ttk.Label(f, text="دسته:").grid(row=4, column=0, sticky="e", pady=5, padx=4)
-        self.cat_var = tk.StringVar(value="مصرفی")
-        ttk.Combobox(f, textvariable=self.cat_var, values=list(CATEGORIES), state="readonly", width=28).grid(
-            row=4, column=1, sticky="w", pady=5
-        )
-
-        ttk.Label(f, text="قفسه:").grid(row=5, column=0, sticky="e", pady=5, padx=4)
-        self.shelf_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.shelf_var, width=30).grid(row=5, column=1, sticky="w", pady=5)
-
-        bf = ttk.Frame(f)
-        bf.grid(row=6, column=0, columnspan=2, pady=16)
-        ttk.Button(bf, text="ذخیره", style="Primary.TButton", command=self._save, width=12).pack(
-            side=tk.LEFT, padx=6
-        )
-        ttk.Button(bf, text="انصراف", style="Secondary.TButton", command=self.destroy, width=10).pack(
-            side=tk.LEFT, padx=6
-        )
+    # ------------------------------------------------------------------- save
 
     def _save(self) -> None:
         name = self.name_var.get().strip()
         if not name:
-            messagebox.showerror("خطا", "نام کالا را وارد کنید.", parent=self)
+            self._show_error("نام کالا را وارد کنید.")
             return
-        try:
-            from app.services.transaction_service import parse_positive_qty
 
-            raw = self.min_var.get().strip() or "0"
-            if raw == "0":
-                mn = 0.0
-            else:
-                mn = parse_positive_qty(raw)
-        except ValueError:
-            try:
-                mn = float(self.min_var.get().replace(",", ".") or "0")
-                if mn < 0:
-                    raise ValueError
-            except ValueError:
-                messagebox.showerror("خطا", "حداقل موجودی باید عدد غیرمنفی باشد.", parent=self)
-                return
-        unit = self.unit_var.get().strip() or "عدد"
-        cat = self.cat_var.get()
-        shelf = self.shelf_var.get().strip()
         user_code = self.user_code_var.get().strip()
         if not user_code:
-            messagebox.showerror("خطا", "کد کالا را وارد کنید.", parent=self)
+            self._show_error("کد کالا را وارد کنید.")
             return
-        warnings = self.service.duplicate_warnings(name, user_code, self.product.code if self.product else None)
-        if warnings and not messagebox.askyesno("هشدار تکراری بودن کالا", "\n".join(warnings) + "\n\nبا وجود هشدار، ثبت را ادامه می‌دهید؟", parent=self):
-            return
+
         try:
-            if self.product:
-                self.service.update(self.product.code, name, unit, mn, cat, shelf, user_code)
-                messagebox.showinfo("موفق", "کالا ویرایش شد.", parent=self)
-            else:
-                p = self.service.add(name, unit, mn, cat, shelf, user_code)
-                messagebox.showinfo("موفق", f"کالا با کد «{p.user_code}» ثبت شد.", parent=self)
-        except Exception as exc:
-            messagebox.showerror("خطا", str(exc), parent=self)
+            min_stock = self._coerce_min_stock(self.min_var.get())
+        except ValueError as exc:
+            self._show_error(str(exc))
             return
-        if self.on_save:
-            self.on_save()
-        self.destroy()
+
+        unit = self.unit_var.get().strip() or "عدد"
+        category = self.cat_var.get()
+        shelf = self.shelf_var.get().strip()
+
+        current_code = self.product.code if self.product is not None else None
+        warnings = self.service.duplicate_warnings(name, user_code, current_code)
+        if warnings and not messagebox.askyesno(
+            "هشدار تکراری بودن کالا",
+            "\n".join(warnings) + "\n\nبا وجود هشدار، ثبت را ادامه می‌دهید؟",
+            parent=self,
+        ):
+            return
+
+        try:
+            if self.product is not None:
+                self.service.update(
+                    self.product.code, name, unit, min_stock, category, shelf, user_code
+                )
+                message = "کالا ویرایش شد."
+            else:
+                created = self.service.add(
+                    name, unit, min_stock, category, shelf, user_code
+                )
+                message = f"کالا با کد «{created.user_code}» ثبت شد."
+        except Exception as exc:  # noqa: BLE001 — نمایش خطای دامنه به کاربر
+            logger.exception("Saving product failed")
+            self._show_error(str(exc))
+            return
+
+        messagebox.showinfo("موفق", message, parent=self)
+        try:
+            if self.on_save is not None:
+                self.on_save()
+        except Exception:
+            # خطای refresh والد نباید دیالوگ را باز نگه دارد
+            logger.exception("on_save callback failed")
+        finally:
+            self.destroy()
+
+    def _show_error(self, message: str) -> None:
+        messagebox.showerror("خطا", message, parent=self)
