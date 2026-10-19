@@ -68,8 +68,6 @@ class ProductService:
         user_code = (user_code or "").strip()
         if not name:
             raise ValueError("نام کالا نمی‌تواند خالی باشد.")
-        if not user_code:
-            raise ValueError("کد کالا را وارد کنید.")
         try:
             min_stock = float(min_stock)
         except (TypeError, ValueError) as exc:
@@ -77,6 +75,7 @@ class ProductService:
         if not math.isfinite(min_stock) or min_stock < 0:
             raise ValueError("حداقل موجودی باید عددی متناهی و غیرمنفی باشد.")
         code = self.next_code()
+        user_code = user_code or code
         try:
             self.db.run(
                 "INSERT INTO products (code, user_code, name, unit, min_stock, category, shelf) VALUES (?,?,?,?,?,?,?)",
