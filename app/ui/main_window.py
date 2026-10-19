@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from app.config import (
     APP_GEOMETRY,
@@ -30,6 +31,11 @@ from app.ui.theme import apply_theme
 from app.ui.widgets.table_view import TxTable
 
 logger = logging.getLogger(__name__)
+
+# سقف ردیف‌های بارگذاری‌شده در جدول (برای کارایی)
+_TX_LOAD_LIMIT = 300
+# سقف آیتم‌های لیست هشدار
+_LOW_LIST_LIMIT = 60
 
 
 class MainWindow(tk.Tk):
@@ -68,6 +74,25 @@ class MainWindow(tk.Tk):
         self.ts = TransactionService(self.db)
         self.backup = BackupService()
         self.reports = ReportService(self.db)
+        self._seed_defaults_if_needed()
+
+    def _seed_defaults_if_needed(self) -> None:
+        """درج کالاهای پیش‌فرض در اولین اجرا (یا پس از بازیابی خالی).
+
+        اگر ماژول seed در دسترس نباشد یا خطا بدهد، برنامه بی‌وقفه ادامه
+        می‌دهد — Seed یک ویژگی اختیاری است، نه پیش‌نیاز.
+        """
+        try:
+            from app.services.seed import seed_if_empty
+        except ImportError:
+            logger.debug("Seed module not available; skipping.")
+            return
+        try:
+            inserted = seed_if_empty(self.db)
+            if inserted:
+                logger.info("Seeded %d default products on first run", inserted)
+        except Exception:
+            logger.exception("Seeding default products failed")
 
     def _set_icon(self) -> None:
         try:
@@ -79,6 +104,7 @@ class MainWindow(tk.Tk):
     def _bind_shortcuts(self) -> None:
         self.bind("<F1>", lambda _e: self._help())
         self.bind("<Control-f>", self._focus_transaction_search)
+        self.bind("<Control-F>", self._focus_transaction_search)
 
     # ------------------------------------------------------------------- menu
 
@@ -113,7 +139,14 @@ class MainWindow(tk.Tk):
         menubar.add_cascade(label="گزارش‌ها", menu=report_m)
 
         help_m = tk.Menu(menubar, tearoff=0)
-        help_m.add_command(label="راهنمای کاربر", accelerator="F1", command=self._help)
+        help_m.add_command(
+            label="راهنمای کاربر", accelerator="F1", command=self._help
+        )
+        help_m.add_command(
+            label="جست‌وجوی گردش‌ها", accelerator="Ctrl+F",
+            command=self._focus_transaction_search,
+        )
+        help_m.add_separator()
         help_m.add_command(label="درباره برنامه", command=self._about)
         menubar.add_cascade(label="راهنما", menu=help_m)
 
@@ -138,7 +171,9 @@ class MainWindow(tk.Tk):
 
         title_box = ttk.Frame(header, style="Header.TFrame")
         title_box.grid(row=0, column=0, sticky="w")
-        ttk.Label(title_box, text="EasyWarehouse", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(
+            title_box, text="EasyWarehouse", style="Header.TLabel"
+        ).pack(anchor="w")
         ttk.Label(
             title_box,
             text="مرکز کنترل موجودی و گردش کالا",
@@ -166,10 +201,12 @@ class MainWindow(tk.Tk):
             metrics, 1, "گردش‌های ثبت‌شده", "۰", "ورود، خروج و عودت", "#2563EB"
         )
         self.metric_low = self._metric_card(
-            metrics, 2, "نیازمند بررسی", "۰", "کمتر از حداقل موجودی", "#D97706"
+            metrics, 2, "نیازمند بررسی", "۰",
+            "کمتر از حداقل یا ناموجود", "#D97706",
         )
         self.metric_zero = self._metric_card(
-            metrics, 3, "ناموجود", "۰", "کالا با موجودی صفر یا کمتر", "#DC2626"
+            metrics, 3, "ناموجود", "۰",
+            "موجودی صفر یا کمتر", "#DC2626",
         )
 
     def _metric_card(
@@ -183,11 +220,15 @@ class MainWindow(tk.Tk):
     ) -> ttk.Label:
         card = ttk.Frame(parent, style="Metric.TFrame", padding=(14, 10))
         card.grid(row=0, column=column, sticky="nsew", padx=5, pady=2)
+        # رنگ لهجه در هر کارت متفاوت است؛ به همین دلیل tk.Frame خام
+        # به‌جای استایل ttk استفاده می‌شود.
         tk.Frame(card, bg=accent, height=4).pack(fill=tk.X, pady=(0, 7))
         ttk.Label(card, text=title, style="MetricLabel.TLabel").pack(anchor="w")
         value_label = ttk.Label(card, text=value, style="MetricValue.TLabel")
         value_label.pack(anchor="w", pady=(3, 0))
-        ttk.Label(card, text=hint, style="MetricHint.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(card, text=hint, style="MetricHint.TLabel").pack(
+            anchor="w", pady=(2, 0)
+        )
         return value_label
 
     def _build_quick_actions(self) -> None:
@@ -224,7 +265,9 @@ class MainWindow(tk.Tk):
         ttk.Label(form_wrap, text="ثبت گردش کالا", style="Section.TLabel").pack(
             anchor="w", pady=(0, 5)
         )
-        self.form = TransactionForm(form_wrap, self.ps, self.ts, on_ok=self.refresh)
+        self.form = TransactionForm(
+            form_wrap, self.ps, self.ts, on_ok=self.refresh
+        )
         self.form.pack(fill=tk.X)
 
     def _build_workspace(self) -> None:
@@ -256,9 +299,12 @@ class MainWindow(tk.Tk):
             side=tk.LEFT, fill=tk.X, expand=True, ipady=4
         )
         self.transaction_search_entry.bind(
-            "<KeyRelease>", lambda _e: self.table.filter(self.tx_search_var.get())
+            "<KeyRelease>",
+            lambda _e: self.table.filter(self.tx_search_var.get()),
         )
-        self.transaction_search_entry.bind("<Escape>", self._clear_transaction_search)
+        self.transaction_search_entry.bind(
+            "<Escape>", self._clear_transaction_search
+        )
         ttk.Button(
             toolbar,
             text="پاک‌کردن",
@@ -354,49 +400,86 @@ class MainWindow(tk.Tk):
     # ---------------------------------------------------------------- refresh
 
     def refresh(self) -> None:
-        """به‌روزرسانی جدول، شاخص‌ها و هشدارها. هر بخش مستقل از دیگری است."""
+        """به‌روزرسانی جدول، شاخص‌ها و هشدارها.
+
+        هر بخش مستقل است: خطا در یک بخش، بقیه را متوقف نمی‌کند. خطاها در
+        انتها یک‌جا گزارش می‌شوند تا کاربر از داده‌های قدیمی گمراه نشود.
+        """
+        errors: list[str] = []
+        txs = []
+
         try:
-            txs = self.ts.all()
+            txs = self.ts.all(limit=_TX_LOAD_LIMIT)
             self.table.load(txs)
         except Exception as exc:
             logger.exception("Failed to load transactions")
-            messagebox.showerror("خطا", str(exc), parent=self)
-            return
+            errors.append(f"جدول تراکنش‌ها: {exc}")
 
         try:
-            self.form.refresh(None)  # فیلتر دسته در این UI وجود ندارد
+            self.form.refresh(None)
         except Exception:
             logger.exception("Failed to refresh transaction form")
+            errors.append("فرم ثبت تراکنش")
 
         try:
-            self._refresh_metrics(txs)
-            self._refresh_low_list()
-            self.status_var.set(f"آماده  |  {len(txs):,} گردش ثبت‌شده")
+            all_products = self.ps.all()
+            total_tx = self.ts.count()
+            self._refresh_metrics(total_tx, all_products)
+            self._refresh_low_list(all_products)
+            self.status_var.set(
+                f"آماده  |  نمایش {len(txs):,} از {total_tx:,} گردش"
+                f"  |  {len(all_products):,} کالا"
+            )
         except Exception:
             logger.exception("Failed to refresh metrics")
+            errors.append("شاخص‌ها و هشدارها")
 
-    def _refresh_metrics(self, txs) -> None:
-        all_products = self.ps.all()
-        lows = [p for p in all_products if p.is_low() or p.is_critical()]
-        zeros = sum(1 for p in all_products if p.stock <= 0)
-        self.metric_products.config(text=f"{self.ps.count():,}")
-        self.metric_transactions.config(text=f"{len(txs):,}")
-        self.metric_low.config(text=f"{len(lows):,}")
-        self.metric_zero.config(text=f"{zeros:,}")
+        if errors:
+            messagebox.showwarning(
+                "به‌روزرسانی ناقص",
+                "برخی بخش‌ها به‌روزرسانی نشدند:\n\n"
+                + "\n".join(f"• {item}" for item in errors),
+                parent=self,
+            )
 
-    def _refresh_low_list(self) -> None:
-        all_products = self.ps.all()
-        lows = sorted(
-            (p for p in all_products if p.is_low() or p.is_critical()),
-            key=lambda p: p.stock,
+    def _refresh_metrics(
+        self, total_tx: int, all_products: list
+    ) -> None:
+        warns = sum(
+            1 for p in all_products if p.is_warning() or p.is_empty()
+        )
+        empties = sum(1 for p in all_products if p.is_empty())
+        self.metric_products.config(text=f"{len(all_products):,}")
+        self.metric_transactions.config(text=f"{total_tx:,}")
+        self.metric_low.config(text=f"{warns:,}")
+        self.metric_zero.config(text=f"{empties:,}")
+
+    def _refresh_low_list(self, all_products: list) -> None:
+        # نکته: کالای با stock=0 و min_stock=0 نه is_low است نه is_critical،
+        # ولی «ناموجود» است. به همین دلیل is_empty هم لحاظ می‌شود.
+        issues = sorted(
+            (
+                p for p in all_products
+                if p.is_warning() or p.is_empty()
+            ),
+            key=lambda p: (p.stock, p.name),
         )
         self.low_list.delete(0, tk.END)
-        if not lows:
+        if not issues:
             self.low_list.insert(tk.END, "✓  وضعیت موجودی مناسب است")
             return
-        for p in lows[:60]:
-            marker = "●" if p.is_critical() else "○"
-            self.low_list.insert(tk.END, f"{marker}  {p.name}: {p.stock:g} {p.unit}")
+        for product in issues[:_LOW_LIST_LIMIT]:
+            marker = "●" if product.is_critical() else "○"
+            suffix = "  (ناموجود)" if product.is_empty() and not product.is_critical() else ""
+            self.low_list.insert(
+                tk.END,
+                f"{marker}  {product.name}: {product.stock:g} {product.unit}{suffix}",
+            )
+        if len(issues) > _LOW_LIST_LIMIT:
+            self.low_list.insert(
+                tk.END,
+                f"… و {len(issues) - _LOW_LIST_LIMIT} مورد دیگر",
+            )
 
     # -------------------------------------------------------------- products
 
@@ -436,19 +519,31 @@ class MainWindow(tk.Tk):
         def load() -> None:
             self._reload_product_tree(tree, search_var.get())
 
-        def edit() -> None:
-            sel = tree.selection()
-            if not sel:
+        def edit_selected() -> None:
+            selection = tree.selection()
+            if not selection:
+                messagebox.showinfo(
+                    "انتخاب کالا",
+                    "لطفاً یک کالا را از فهرست انتخاب کنید.",
+                    parent=win,
+                )
                 return
-            product = self.ps.get(sel[0])
+            product = self.ps.get(selection[0])
             if product is not None:
-                ProductForm(win, self.ps, product=product, on_save=reload_and_refresh)
+                ProductForm(
+                    win, self.ps, product=product, on_save=reload_and_refresh
+                )
 
-        def delete() -> None:
-            sel = tree.selection()
-            if not sel:
+        def delete_selected() -> None:
+            selection = tree.selection()
+            if not selection:
+                messagebox.showinfo(
+                    "انتخاب کالا",
+                    "لطفاً یک کالا را از فهرست انتخاب کنید.",
+                    parent=win,
+                )
                 return
-            values = tree.item(sel[0], "values")
+            values = tree.item(selection[0], "values")
             if not messagebox.askyesno(
                 "تأیید",
                 f"حذف کالای {values[0]} - {values[1]}؟",
@@ -456,20 +551,58 @@ class MainWindow(tk.Tk):
             ):
                 return
             try:
-                self.ps.delete(sel[0])
+                self.ps.delete(selection[0])
             except Exception as exc:
                 logger.exception("Delete product failed")
                 messagebox.showerror("خطا", str(exc), parent=win)
                 return
             reload_and_refresh()
 
-        search_var.trace_add(
-            "write", lambda *_a: self._reload_product_tree(tree, search_var.get())
-        )
+        # دوبار کلیک روی ردیف = ویرایش
+        tree.bind("<Double-1>", lambda _e: edit_selected())
+        # Enter = ویرایش، Delete = حذف
+        tree.bind("<Return>", lambda _e: edit_selected())
+        tree.bind("<Delete>", lambda _e: delete_selected())
+
+        search_var.trace_add("write", lambda *_args: load())
 
         buttons = ttk.Frame(win)
         buttons.pack(fill=tk.X, padx=10, pady=6)
-        self._build_product_buttons(buttons, win, load)
+        ttk.Button(
+            buttons,
+            text="جدید",
+            style="Primary.TButton",
+            command=lambda: ProductForm(
+                win, self.ps, on_save=reload_and_refresh
+            ),
+        ).pack(side=tk.LEFT, padx=3)
+        ttk.Button(
+            buttons,
+            text="ویرایش",
+            style="Secondary.TButton",
+            command=edit_selected,
+        ).pack(side=tk.LEFT, padx=3)
+        ttk.Button(
+            buttons,
+            text="حذف",
+            style="Danger.TButton",
+            command=delete_selected,
+        ).pack(side=tk.LEFT, padx=3)
+        ttk.Button(
+            buttons,
+            text="دریافت الگوی Excel",
+            style="Secondary.TButton",
+            command=lambda: self._download_product_template(win),
+        ).pack(side=tk.LEFT, padx=3)
+        ttk.Button(
+            buttons,
+            text="ورود از Excel",
+            style="Primary.TButton",
+            command=lambda: self._import_products_excel(win, reload_and_refresh),
+        ).pack(side=tk.LEFT, padx=3)
+        ttk.Button(buttons, text="بستن", command=win.destroy).pack(
+            side=tk.RIGHT
+        )
 
         load()
         return win
@@ -519,45 +652,6 @@ class MainWindow(tk.Tk):
                 ),
             )
 
-    def _build_product_buttons(
-        self, parent: ttk.Frame, win: tk.Toplevel, reload_fn: Callable[[], None]
-    ) -> None:
-        def new() -> None:
-            ProductForm(
-                win,
-                self.ps,
-                on_save=lambda: (reload_fn(), self.refresh()),
-            )
-
-        def import_excel() -> None:
-            self._import_products_excel(win, reload_fn)
-
-        ttk.Button(
-            parent, text="جدید", style="Primary.TButton", command=new
-        ).pack(side=tk.LEFT, padx=3)
-        ttk.Button(
-            parent,
-            text="ویرایش",
-            style="Secondary.TButton",
-            command=lambda: win.event_generate("<<EditProduct>>"),
-        ).pack(side=tk.LEFT, padx=3)
-        ttk.Button(
-            parent,
-            text="حذف",
-            style="Danger.TButton",
-            command=lambda: win.event_generate("<<DeleteProduct>>"),
-        ).pack(side=tk.LEFT, padx=3)
-        ttk.Button(
-            parent,
-            text="دریافت الگوی Excel",
-            style="Secondary.TButton",
-            command=lambda: self._download_product_template(win),
-        ).pack(side=tk.LEFT, padx=3)
-        ttk.Button(
-            parent, text="ورود از Excel", style="Primary.TButton", command=import_excel
-        ).pack(side=tk.LEFT, padx=3)
-        ttk.Button(parent, text="بستن", command=win.destroy).pack(side=tk.RIGHT)
-
     # --------------------------------------------------------------- helpers
 
     @staticmethod
@@ -585,9 +679,9 @@ class MainWindow(tk.Tk):
             create_product_template(path)
             messagebox.showinfo(
                 "الگوی Excel آماده است",
-                "فایل الگو ذخیره شد. کد و نام کالا را وارد کنید؛ تکراری بودن هرکدام "
-                "هشدار می‌دهد اما با تأیید شما مانع ورود نیست. شناسه داخلی خودکار "
-                "ساخته می‌شود و موجودی اولیه صفر خواهد بود.",
+                "فایل الگو ذخیره شد. کد و نام کالا را وارد کنید؛ تکراری بودن "
+                "هرکدام هشدار می‌دهد اما با تأیید شما مانع ورود نیست. "
+                "شناسه داخلی خودکار ساخته می‌شود و موجودی اولیه صفر خواهد بود.",
                 parent=parent,
             )
         except Exception as exc:
@@ -610,7 +704,9 @@ class MainWindow(tk.Tk):
                 preview_product_import,
             )
 
-            rows, errors, total_rows, warnings = preview_product_import(path, self.ps)
+            rows, errors, total_rows, warnings = preview_product_import(
+                path, self.ps
+            )
             if not rows and not errors:
                 messagebox.showinfo(
                     "ورود کالا",
@@ -631,14 +727,16 @@ class MainWindow(tk.Tk):
                     preview.append(f"... و {len(errors) - 12} خطای دیگر")
             if warnings:
                 preview.append("")
-                preview.append("هشدارهای تکراری (در صورت تأیید، وارد می‌شوند):")
+                preview.append(
+                    "هشدارهای تکراری (در صورت تأیید، وارد می‌شوند):"
+                )
                 preview.extend(warnings[:12])
                 if len(warnings) > 12:
                     preview.append(f"... و {len(warnings) - 12} هشدار دیگر")
             preview.append("")
             preview.append(
-                "کد کالا از فایل خوانده می‌شود؛ شناسه داخلی خودکار ساخته می‌شود "
-                "و موجودی اولیه صفر است."
+                "کد کالا از فایل خوانده می‌شود؛ شناسه داخلی خودکار ساخته "
+                "می‌شود و موجودی اولیه صفر است."
             )
             if not rows:
                 messagebox.showwarning(
@@ -657,11 +755,13 @@ class MainWindow(tk.Tk):
             messagebox.showinfo(
                 "ورود کامل شد",
                 f"{imported} کالا با موفقیت وارد شد."
-                + (f"\n{len(errors)} ردیف به دلیل خطای داده رد شد." if errors else "")
+                + (
+                    f"\n{len(errors)} ردیف به دلیل خطای داده رد شد."
+                    if errors else ""
+                )
                 + (
                     f"\n{len(warnings)} هشدار تکراری با تأیید شما پذیرفته شد."
-                    if warnings
-                    else ""
+                    if warnings else ""
                 ),
                 parent=parent,
             )
@@ -678,9 +778,22 @@ class MainWindow(tk.Tk):
                 "توجه", "یک ردیف را از جدول انتخاب کنید.", parent=self
             )
             return
-        if not messagebox.askyesno(
-            "تأیید", f"حذف تراکنش شماره {tid}؟", parent=self
-        ):
+
+        # خلاصهٔ تراکنش برای تأیید آگاهانه‌تر
+        summary = f"حذف تراکنش شماره {tid}؟"
+        try:
+            tx = self.ts.get(tid)
+            if tx is not None:
+                summary = (
+                    f"حذف تراکنش شماره {tid}؟\n\n"
+                    f"{tx.type_fa()} به مقدار {tx.qty:g} {tx.unit or ''}\n"
+                    f"کالا: {tx.name or tx.code}\n"
+                    f"تاریخ: {tx.date}"
+                )
+        except Exception:
+            logger.debug("Could not load tx details for confirmation", exc_info=True)
+
+        if not messagebox.askyesno("تأیید", summary, parent=self):
             return
         try:
             self.ts.delete(tid)
@@ -692,7 +805,9 @@ class MainWindow(tk.Tk):
     # ---------------------------------------------------------------- backup
 
     def _do_backup(self) -> None:
-        dest = filedialog.askdirectory(title="انتخاب پوشه پشتیبان", parent=self)
+        dest = filedialog.askdirectory(
+            title="انتخاب پوشه پشتیبان", parent=self
+        )
         if not dest:
             return
         try:
@@ -708,7 +823,10 @@ class MainWindow(tk.Tk):
         path = filedialog.askopenfilename(
             parent=self,
             title="انتخاب فایل پشتیبان",
-            filetypes=[("Database", "*.db *.sqlite *.sqlite3"), ("All", "*.*")],
+            filetypes=[
+                ("Database", "*.db *.sqlite *.sqlite3"),
+                ("All", "*.*"),
+            ],
         )
         if not path:
             return
@@ -718,42 +836,51 @@ class MainWindow(tk.Tk):
             parent=self,
         ):
             return
+
         try:
             self.backup.restore(path)
         except Exception as exc:
             logger.exception("Restore failed")
-            messagebox.showerror("خطا", str(exc), parent=self)
+            messagebox.showerror("خطا در بازیابی", str(exc), parent=self)
             return
+
         try:
             self._reload_after_restore()
-        except DatabaseError as exc:
-            logger.exception("DB reload after restore failed")
+        except Exception as exc:
+            logger.exception("Reload after restore failed")
             messagebox.showerror(
-                "خطا",
-                f"دیتابیس بازگردانی شد اما بارگذاری مجدد ناموفق بود:\n{exc}",
+                "خطا در بارگذاری مجدد",
+                f"دیتابیس بازیابی شد اما بارگذاری مجدد ناموفق بود:\n{exc}\n\n"
+                "لطفاً برنامه را یک بار ببندید و دوباره باز کنید.",
                 parent=self,
             )
             return
-        messagebox.showinfo("بازیابی", "بازیابی با موفقیت انجام شد.", parent=self)
+
+        messagebox.showinfo(
+            "بازیابی", "بازیابی با موفقیت انجام شد.", parent=self
+        )
 
     def _reload_after_restore(self) -> None:
+        """DB و سرویس‌ها را بازسازی می‌کند و UI را به آن‌ها وصل می‌کند."""
         old_db = getattr(self, "db", None)
-        if old_db is not None and hasattr(old_db, "close"):
+        if old_db is not None:
             try:
                 old_db.close()
             except Exception:
                 logger.debug("Old DB close failed", exc_info=True)
 
         self.db = DB()
-        self._init_services()
+        self._init_services()  # در صورت خالی بودن DB جدید، seed اجرا می‌شود
 
-        # فرم تراکنش به سرویس‌های قدیمی اشاره می‌کرد؛ آن را بازسازی می‌کنیم
+        # فرم به سرویس‌های قدیمی اشاره می‌کرد؛ بازسازی می‌شود
         form_parent = self.form.master
         self.form.destroy()
-        self.form = TransactionForm(form_parent, self.ps, self.ts, on_ok=self.refresh)
+        self.form = TransactionForm(
+            form_parent, self.ps, self.ts, on_ok=self.refresh
+        )
         self.form.pack(fill=tk.X)
 
-        # پنجرهٔ کالاها را می‌بندیم تا با سرویس‌های تازه باز شود
+        # پنجرهٔ کالاها (اگر باز است) با سرویس‌های قدیمی کار می‌کرد
         if self._win_alive(self._products_win):
             self._products_win.destroy()
         self._products_win = None
@@ -784,7 +911,7 @@ class MainWindow(tk.Tk):
         )
 
     def _save_report(
-        self, title: str, filename: str, exporter: Callable[[str], str]
+        self, title: str, filename: str, exporter: Callable[[str], Path]
     ) -> None:
         path = filedialog.asksaveasfilename(
             parent=self,
@@ -797,10 +924,14 @@ class MainWindow(tk.Tk):
             return
         try:
             saved = exporter(path)
-            messagebox.showinfo(title, f"گزارش ذخیره شد:\n{saved}", parent=self)
+            messagebox.showinfo(
+                title, f"گزارش ذخیره شد:\n{saved}", parent=self
+            )
         except Exception as exc:
             logger.exception("Report export failed")
-            messagebox.showerror("خطا در تهیه گزارش", str(exc), parent=self)
+            messagebox.showerror(
+                "خطا در تهیه گزارش", str(exc), parent=self
+            )
 
     # ----------------------------------------------------------- help/about
 
