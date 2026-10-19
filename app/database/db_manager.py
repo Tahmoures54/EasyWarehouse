@@ -62,7 +62,7 @@ class DB:
 
     def run(self, sql: str, params: Sequence[Any] = ()) -> int:
         try:
-            with self._connect() as conn:
+            with closing(self._connect()) as conn:
                 cur = conn.execute(sql, tuple(params))
                 conn.commit()
                 return int(cur.lastrowid or cur.rowcount or 0)
@@ -73,7 +73,7 @@ class DB:
 
     def run_many(self, sql: str, rows: List[Tuple[Any, ...]]) -> int:
         try:
-            with self._connect() as conn:
+            with closing(self._connect()) as conn:
                 cur = conn.executemany(sql, rows)
                 conn.commit()
                 return int(cur.rowcount or 0)
@@ -82,14 +82,14 @@ class DB:
 
     def one(self, sql: str, params: Sequence[Any] = ()) -> Optional[sqlite3.Row]:
         try:
-            with self._connect() as conn:
+            with closing(self._connect()) as conn:
                 return conn.execute(sql, tuple(params)).fetchone()
         except sqlite3.Error as exc:
             raise DatabaseError(f"خطا در خواندن داده: {exc}") from exc
 
     def all(self, sql: str, params: Sequence[Any] = ()) -> List[sqlite3.Row]:
         try:
-            with self._connect() as conn:
+            with closing(self._connect()) as conn:
                 return list(conn.execute(sql, tuple(params)).fetchall())
         except sqlite3.Error as exc:
             raise DatabaseError(f"خطا در خواندن داده: {exc}") from exc
