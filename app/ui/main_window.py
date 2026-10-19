@@ -307,8 +307,77 @@ class MainWindow(tk.Tk):
                    command=lambda: ProductForm(win, self.ps, on_save=lambda: (load(), self.refresh()))).pack(side=tk.LEFT, padx=3)
         ttk.Button(bf, text="ویرایش", style="Secondary.TButton", command=edit).pack(side=tk.LEFT, padx=3)
         ttk.Button(bf, text="حذف", style="Danger.TButton", command=delete).pack(side=tk.LEFT, padx=3)
+        ttk.Button(bf, text="دریافت الگوی Excel", style="Secondary.TButton",
+                   command=lambda: self._download_product_template(win)).pack(side=tk.LEFT, padx=3)
+        ttk.Button(bf, text="ورود از Excel", style="Primary.TButton",
+                   command=lambda: self._import_products_excel(win, load)).pack(side=tk.LEFT, padx=3)
         ttk.Button(bf, text="بستن", command=win.destroy).pack(side=tk.RIGHT)
         load()
+
+    def _download_product_template(self, parent) -> None:
+        path = filedialog.asksaveasfilename(
+            parent=parent, title="ذخیره الگوی ورود کالا",
+            defaultextension=".xlsx", initialfile="easywarehouse-products-template.xlsx",
+            filetypes=[("فایل Excel", "*.xlsx")],
+        )
+        if not path:
+            return
+        try:
+            from app.services.product_excel_service import create_product_template
+            create_product_template(path)
+            messagebox.showinfo(
+                "الگوی Excel آماده است",
+                "فایل الگو ذخیره شد. اطلاعات را در برگه «فهرست کالاها» و زیر عنوان‌ها وارد کنید. "
+                "کد کالا خودکار تولید می‌شود و موجودی اولیه صفر خواهد بود.",
+                parent=parent,
+            )
+        except Exception as exc:
+            messagebox.showerror("خطا در ساخت الگو", str(exc), parent=parent)
+
+    def _import_products_excel(self, parent, reload_products) -> None:
+        path = filedialog.askopenfilename(
+            parent=parent, title="انتخاب فایل Excel کالاها",
+            filetypes=[("فایل Excel", "*.xlsx")],
+        )
+        if not path:
+            return
+        try:
+            from app.services.product_excel_service import preview_product_import, import_product_rows
+            rows, errors, total_rows = preview_product_import(path, self.ps)
+            if not rows and not errors:
+                messagebox.showinfo("ورود کالا", "فایل ردیف کالای قابل ورود ندارد.", parent=parent)
+                return
+            preview = [
+                f"ردیف‌های قابل ورود: {len(rows)}",
+                f"ردیف‌های ردشده: {len(errors)}",
+                f"تعداد ردیف‌های بررسی‌شده: {total_rows}",
+            ]
+            if errors:
+                preview.extend(["", "موارد نیازمند اصلاح:"])
+                preview.extend(errors[:12])
+                if len(errors) > 12:
+                    preview.append(f"... و {len(errors) - 12} خطای دیگر")
+            preview.extend(["", "کد کالا خودکار تولید می‌شود؛ موجودی اولیه صفر است."])
+            if not rows:
+                messagebox.showwarning("نتیجه بررسی فایل", "\n".join(preview), parent=parent)
+                return
+            if not messagebox.askyesno(
+                "تأیید ورود کالاها",
+                "\n".join(preview) + "\n\nفقط ردیف‌های معتبر وارد شوند؟",
+                parent=parent,
+            ):
+                return
+            imported = import_product_rows(self.ps, rows)
+            reload_products()
+            self.refresh()
+            messagebox.showinfo(
+                "ورود کامل شد",
+                f"{imported} کالا با موفقیت وارد شد."
+                + (f"\n{len(errors)} ردیف به دلیل خطا یا تکراری بودن رد شد." if errors else ""),
+                parent=parent,
+            )
+        except Exception as exc:
+            messagebox.showerror("خطا در ورود Excel", str(exc), parent=parent)
 
     def _del_tx(self) -> None:
         tid = self.table.selected_id()
