@@ -4,77 +4,145 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox, ttk
 from typing import Optional
 
+from app.config import APP_NAME
 from app.ui import theme as T
 
 
 class HelpWindow(tk.Toplevel):
     """راهنمای غیرمودال با ۴ تب فارسی."""
 
+    DEFAULT_WIDTH = 800
+    DEFAULT_HEIGHT = 600
+    MIN_WIDTH = 640
+    MIN_HEIGHT = 480
+
     def __init__(self, master: Optional[tk.Misc] = None) -> None:
         super().__init__(master)
-        self.title("راهنمای کاربر - EasyWarehouse")
-        self.geometry("800x600")
-        self.minsize(640, 480)
+        self._texts: list[tk.Text] = []
+        self._configure_window(master)
+        self._build()
+        self._bind_shortcuts()
+        self._center_on(master)
+
+    # ------------------------------------------------------------------ setup
+
+    def _configure_window(self, master: Optional[tk.Misc]) -> None:
+        self.title(f"راهنمای کاربر — {APP_NAME}")
+        self.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.configure(bg=T.BG)
-        if master:
+        if master is not None:
             self.transient(master)
 
-        nb = ttk.Notebook(self)
-        nb.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    def _bind_shortcuts(self) -> None:
+        self.bind("<Escape>", lambda _e: self.destroy())
 
-        tabs = [
-            ("شروع سریع", self._quick_start),
-            ("ثبت تراکنش", self._transactions),
-            ("مدیریت کالاها", self._products),
-            ("سوالات متداول", self._faq),
-        ]
-        for title, builder in tabs:
-            frame = ttk.Frame(nb)
-            nb.add(frame, text=title)
-            self._scrollable_text(frame, builder())
+    def _center_on(self, master: Optional[tk.Misc]) -> None:
+        self.update_idletasks()
+        width = max(self.winfo_reqwidth(), self.DEFAULT_WIDTH)
+        height = max(self.winfo_reqheight(), self.DEFAULT_HEIGHT)
+        width = min(width, self.winfo_screenwidth())
+        height = min(height, self.winfo_screenheight())
 
-        bf = ttk.Frame(self)
-        bf.pack(fill=tk.X, padx=10, pady=8)
-        ttk.Button(bf, text="بستن", style="Secondary.TButton", command=self.destroy).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(bf, text="چاپ راهنما", style="Primary.TButton", command=self._print).pack(side=tk.RIGHT, padx=4)
+        if master is not None and master.winfo_width() > 1:
+            x = master.winfo_rootx() + (master.winfo_width() - width) // 2
+            y = master.winfo_rooty() + (master.winfo_height() - height) // 2
+        else:
+            x = (self.winfo_screenwidth() - width) // 2
+            y = (self.winfo_screenheight() - height) // 2
+        self.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
 
-    def _scrollable_text(self, parent: ttk.Frame, content: str) -> None:
+    # ----------------------------------------------------------------- layout
+
+    def _build(self) -> None:
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        tabs = (
+            ("شروع سریع", self._quick_start()),
+            ("ثبت تراکنش", self._transactions()),
+            ("مدیریت کالاها", self._products()),
+            ("سوالات متداول", self._faq()),
+        )
+        for title, content in tabs:
+            frame = ttk.Frame(notebook)
+            notebook.add(frame, text=title)
+            self._texts.append(self._scrollable_text(frame, content))
+
+        buttons = ttk.Frame(self)
+        buttons.pack(fill=tk.X, padx=10, pady=8)
+        ttk.Button(
+            buttons, text="بستن", style="Secondary.TButton",
+            command=self.destroy,
+        ).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(
+            buttons, text="کپی همه متن", style="Primary.TButton",
+            command=self._copy_all,
+        ).pack(side=tk.RIGHT, padx=4)
+
+    @staticmethod
+    def _scrollable_text(parent: ttk.Frame, content: str) -> tk.Text:
         wrap = ttk.Frame(parent)
         wrap.pack(fill=tk.BOTH, expand=True)
-        sb = ttk.Scrollbar(wrap)
-        txt = tk.Text(
+
+        scrollbar = ttk.Scrollbar(wrap)
+        text = tk.Text(
             wrap,
             wrap=tk.WORD,
+            justify=tk.RIGHT,          # توجیه راست برای متن فارسی
             font=T.FONT,
             bg=T.CARD_BG,
             fg=T.TEXT,
-            yscrollcommand=sb.set,
+            yscrollcommand=scrollbar.set,
             padx=12,
             pady=12,
+            spacing1=2,
+            spacing3=2,
             relief=tk.FLAT,
+            cursor="arrow",             # غیرقابل‌ویرایش؛ I-beam گمراه‌کننده است
         )
-        sb.config(command=txt.yview)
-        txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sb.pack(side=tk.RIGHT, fill=tk.Y)
-        txt.insert("1.0", content)
-        txt.config(state=tk.DISABLED)
+        scrollbar.config(command=text.yview)
+        text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-    def _print(self) -> None:
+        text.insert("1.0", content)
+        text.config(state=tk.DISABLED)
+
+        # Ctrl+A برای انتخاب همه (Ctrl+C پیش‌فرض کار می‌کند)
+        def select_all(_event=None):
+            text.tag_add(tk.SEL, "1.0", tk.END)
+            text.mark_set(tk.INSERT, "1.0")
+            return "break"
+
+        text.bind("<Control-a>", select_all)
+        text.bind("<Control-A>", select_all)
+        return text
+
+    # ---------------------------------------------------------------- actions
+
+    def _copy_all(self) -> None:
+        tabs = ("شروع سریع", "ثبت تراکنش", "مدیریت کالاها", "سوالات متداول")
+        parts = [
+            f"=== {title} ===\n{txt.get('1.0', 'end-1c')}"
+            for title, txt in zip(tabs, self._texts)
+        ]
+        self.clipboard_clear()
+        self.clipboard_append("\n\n".join(parts))
         messagebox.showinfo(
-            "چاپ",
-            "متن راهنما را می‌توانید از تب‌ها کپی کنید یا از منوی پرونده پشتیبان بگیرید.\n"
-            "برای چاپ مستقیم، از قابلیت چاپ سیستم‌عامل روی متن کپی‌شده استفاده کنید.",
+            "کپی شد",
+            "متن کامل راهنما در کلیپ‌بورد قرار گرفت.",
             parent=self,
         )
+
+    # -------------------------------------------------------------- content
 
     @staticmethod
     def _quick_start() -> str:
         return (
-            "شروع سریع EasyWarehouse\n"
-            "========================\n\n"
+            "شروع سریع\n"
+            "=========\n\n"
             "۱) از Combobox کالا را انتخاب کنید (نمایش به صورت «کد - نام»).\n"
             "۲) نوع تراکنش را مشخص کنید: ورود / خروج / عودت.\n"
             "۳) تعداد را وارد کنید (فقط عدد مثبت).\n"
@@ -108,7 +176,8 @@ class HelpWindow(tk.Toplevel):
         return (
             "مدیریت کالاها\n"
             "=============\n\n"
-            "• کد کالا را کاربر تعیین می‌کند؛ کد تکراری یا نام تکراری هشدار می‌دهد، اما با تأیید کاربر قابل ثبت است.\n"
+            "• کد کالا را کاربر تعیین می‌کند؛ کد تکراری یا نام تکراری هشدار می‌دهد،\n"
+            "  اما با تأیید کاربر قابل ثبت است.\n"
             "• نام کالا نباید تکراری باشد.\n"
             "• حداقل موجودی (min_stock) برای هشدار کمبود استفاده می‌شود.\n"
             "• دسته: مصرفی / تکنیکال / عمومی\n"
@@ -122,8 +191,8 @@ class HelpWindow(tk.Toplevel):
         return (
             "سوالات متداول\n"
             "=============\n\n"
-            "س: دیتابیس کجاست؟\n"
-            "ج: در ویندوز مسیر %%APPDATA%%\\EasyWarehouse\\anbar.db\n"
+            "س: پایگاه داده کجاست؟\n"
+            "ج: در ویندوز: %APPDATA%\\EasyWarehouse\\anbar.db\n"
             "   در لینوکس: ~/.local/share/EasyWarehouse/anbar.db\n\n"
             "س: چطور پشتیبان بگیرم؟\n"
             "ج: منوی پرونده → پشتیبان‌گیری\n\n"
