@@ -3,26 +3,51 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import date
 from typing import List, Optional, Tuple
 
-from app.config import ALLOW_NEGATIVE_STOCK
+from app.config import ALLOW_NEGATIVE_STOCK, TYPES
 from app.database.db_manager import DB
 from app.models.transaction import Transaction
 from app.services.product_service import ProductService
 
+logger = logging.getLogger(__name__)
+
+# --------------------------------------------------------------- constants
+
+# ارقام فارسی/عربی → لاتین (برای ورودی کاربر فارسی‌زبان)
+_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+# CASE مشترک محاسبه موجودی — تنها تعریف، همه‌جا استفاده.
+STOCK_CASE = """
+    CASE WHEN t.type IN ('IN','RETURN') THEN t.qty
+         WHEN t.type = 'OUT' THEN -t.qty
+         ELSE 0 END
+"""
+
+# ---------------------------------------------------------------- parsing
+
 
 def parse_positive_qty(raw: str) -> float:
-    """اعتبارسنجی مقدار مثبت (عدد صحیح یا اعشاری مثبت)."""
-    text = (raw or "").strip().replace(",", ".")
+    """اعتبارسنجی مقدار مثبت (عدد صحیح یا اعشاری).
+
+    - ارقام فارسی/عربی به لاتین تبدیل می‌شوند.
+    - جداکنندهٔ اعشار ``.`` و ``,`` و ``،`` پذیرفته می‌شود.
+    - نماد علمی (``1e5``) و علائم (+/-) پذیرفته **نمی‌شوند**.
+    """
+    text = (raw or "").strip().translate(_FA_DIGITS)
+    text = text.replace("،", ".").replace(",", ".")
     if not text:
         raise ValueError("مقدار را وارد کنید.")
+    if text.startswith(("-", "+")):
+        raise ValueError("مقدار باید عددی مثبت باشد (بدون علامت).")
+    if text.count(".") > 1:
+        raise ValueError("فرمت عدد نامعتبر است؛ فقط یک نقطهٔ اعشار مجاز است.")
     allowed = set("0123456789.")
     if any(ch not in allowed for ch in text):
-        raise ValueError("مقدار فقط باید عدد باشد (حروف مجاز نیست).")
-    if text.count(".") > 1:
-        raise ValueError("فرمت عدد نامعتبر است.")
+        raise ValueError("مقدار فقط باید عدد باشد (حروف و نمادها مجاز نیست).")
     try:
         qty = float(text)
     except ValueError as exc:
@@ -33,27 +58,50 @@ def parse_positive_qty(raw: str) -> float:
 
 
 def validate_transaction_date(value: Optional[str]) -> str:
-    """تاریخ را فقط با قالب واقعی ISO YYYY-MM-DD می‌پذیرد."""
+    """تاریخ را فقط با قالب واقعی ISO ``YYYY-MM-DD`` می‌پذیرد.
+
+    - ``None`` → تاریخ امروز (برای «استفاده از پیش‌فرض»).
+    - ``""``  → خطای صریح (کاربر به‌اشتباه فیلد را خالی کرده).
+    - قالب‌های دیگر (``2026/10/19``، ``20261019``، هفتهٔ ISO) رد می‌شوند
+      حتی اگر نسخهٔ Python آن‌ها را بپذیرد، چون مقایسهٔ ``isoformat``
+      صورت می‌گیرد.
+    """
     if value is None:
         return Transaction.today()
-    text = value.strip()
+    text = (value or "").strip()
     if not text:
-        raise ValueError("تاریخ را وارد کنید؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است.")
+        raise ValueError(
+            "تاریخ را وارد کنید؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است."
+        )
     try:
         parsed = date.fromisoformat(text)
     except (TypeError, ValueError) as exc:
-        raise ValueError("تاریخ نامعتبر است؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است.") from exc
+        raise ValueError(
+            "تاریخ نامعتبر است؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است."
+        ) from exc
     if parsed.isoformat() != text:
-        raise ValueError("تاریخ نامعتبر است؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است.")
+        raise ValueError(
+            "تاریخ نامعتبر است؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است."
+        )
     return text
 
 
+# ------------------------------------------------------------------ service
+
+
 class TransactionService:
-    """ثبت ورود / خروج / عودت با سیاست روشن کنترل موجودی."""
+    """ثبت ورود / خروج / عودت با سیاست روشن کنترل موجودی.
+
+    قرارداد: هر متد ``add`` یک تراکنش اتمیک است. بررسی موجودی و درج در
+    یک ``BEGIN IMMEDIATE`` انجام می‌شوند تا دو خروج هم‌زمان نتوانند بر
+    اساس یک موجودی قدیمی هر دو تأیید شوند.
+    """
 
     def __init__(self, db: Optional[DB] = None) -> None:
         self.db = db or DB()
         self.products = ProductService(self.db)
+
+    # -------------------------------------------------------------- add
 
     def add(
         self,
@@ -64,107 +112,253 @@ class TransactionService:
         note: str = "",
         allow_overdraw: Optional[bool] = None,
     ) -> Tuple[Transaction, Optional[str]]:
-        type_ = (type_ or "").upper()
-        if type_ not in ("IN", "OUT", "RETURN"):
+        """ثبت یک تراکنش.
+
+        خروجی: ``(تراکنش، هشدار)`` — هشدار ``None`` یعنی وضعیت عادی.
+        برای خروجی که موجودی را به صفر یا منفی می‌برد، هشدار داده می‌شود؛
+        اگر سیاست ``ALLOW_NEGATIVE_STOCK`` خاموش باشد، منفی‌شدن خطا است.
+        """
+        type_normalized = (type_ or "").strip().upper()
+        if type_normalized not in TYPES:
             raise ValueError("نوع تراکنش باید ورود، خروج یا عودت باشد.")
+
         try:
-            qty = float(qty)
+            quantity = float(qty)
         except (TypeError, ValueError) as exc:
             raise ValueError("مقدار باید عددی معتبر باشد.") from exc
-        if not math.isfinite(qty) or qty <= 0:
+        if not math.isfinite(quantity) or quantity <= 0:
             raise ValueError("مقدار باید عددی متناهی و بزرگ‌تر از صفر باشد.")
-        code = (code or "").strip()
-        if not code:
+
+        product_code = (code or "").strip()
+        if not product_code:
             raise ValueError("کد کالا را انتخاب کنید.")
-        date_str = validate_transaction_date(date_str)
-        if allow_overdraw is None:
-            allow_overdraw = ALLOW_NEGATIVE_STOCK
-        if not isinstance(allow_overdraw, bool):
+
+        transaction_date = validate_transaction_date(date_str)
+
+        overdraw_allowed = (
+            ALLOW_NEGATIVE_STOCK if allow_overdraw is None else allow_overdraw
+        )
+        if not isinstance(overdraw_allowed, bool):
             raise ValueError("سیاست موجودی منفی باید روشن یا خاموش باشد.")
 
-        warning: Optional[str] = None
-        clean_note = (note or "").strip() or None
+        note_value = (note or "").strip()
 
-        # بررسی موجودی و درج تراکنش در یک تراکنش اتمیک انجام می‌شوند.
-        # BEGIN IMMEDIATE در DB.transaction مانع تأیید خروج‌های هم‌زمان
-        # بر اساس یک مقدار موجودی قدیمی می‌شود.
+        warning: Optional[str] = None
+
         with self.db.transaction() as conn:
-            row = conn.execute(
-                """
+            product = conn.execute(
+                f"""
                 SELECT p.code, p.user_code, p.name, p.unit, p.min_stock,
-                       COALESCE(SUM(
-                           CASE WHEN t.type IN ('IN','RETURN') THEN t.qty
-                                WHEN t.type='OUT' THEN -t.qty ELSE 0 END
-                       ), 0) AS stock
+                       COALESCE(SUM({STOCK_CASE}), 0) AS stock
                 FROM products p
                 LEFT JOIN transactions t ON p.code = t.code
                 WHERE p.code = ?
                 GROUP BY p.code
                 """,
-                (code,),
+                (product_code,),
             ).fetchone()
-            if not row:
-                raise ValueError(f"کالایی با کد {code} یافت نشد.")
+            if not product:
+                raise ValueError(f"کالایی با کد {product_code} یافت نشد.")
 
-            stock = float(row["stock"] or 0)
-            unit = row["unit"] or "عدد"
-            min_stock = float(row["min_stock"] or 0)
-            if type_ == "OUT":
-                after = stock - qty
-                if after < 0:
-                    warning = (
-                        f"موجودی منفی می‌شود و موجودی کافی نیست. موجودی فعلی: {stock:g} {unit}؛ "
-                        f"مقدار خروج: {qty:g} {unit}؛ کسری: {-after:g} {unit}."
-                    )
-                    if not allow_overdraw:
-                        raise ValueError(warning + "\nثبت خروج انجام نشد.")
-                elif after < min_stock:
-                    warning = (
-                        f"هشدار: موجودی پس از خروج کمتر از حداقل می‌شود. "
-                        f"فعلی: {stock:g}؛ حداقل: {min_stock:g}؛ بعد: {after:g}."
-                    )
+            stock = float(product["stock"] or 0)
+            unit = product["unit"] or "عدد"
+            min_stock = float(product["min_stock"] or 0)
+            name = product["name"] or ""
+            user_code = product["user_code"] or product_code
 
-            cur = conn.execute(
-                "INSERT INTO transactions (code, type, qty, date, note) VALUES (?,?,?,?,?)",
-                (code, type_, qty, date_str, clean_note),
+            if type_normalized == "OUT":
+                warning = self._evaluate_outgoing(stock, quantity, min_stock, unit)
+                if warning and stock - quantity < 0 and not overdraw_allowed:
+                    raise ValueError(warning + "\nثبت خروج انجام نشد.")
+
+            cursor = conn.execute(
+                "INSERT INTO transactions (code, type, qty, date, note) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (product_code, type_normalized, quantity, transaction_date, note_value),
             )
-            tid = int(cur.lastrowid)
+            new_id = cursor.lastrowid
+            if new_id is None:
+                raise RuntimeError(
+                    "شناسهٔ تراکنش جدید از دیتابیس دریافت نشد."
+                )
 
-        tx = Transaction(
-            id=tid, code=code, type=type_, qty=qty, date=date_str,
-            note=clean_note or "", name=row["name"], unit=unit, user_code=row["user_code"],
+        if warning:
+            logger.info(
+                "Transaction accepted with warning | code=%s type=%s qty=%g stock_before=%g stock_after=%g",
+                product_code, type_normalized, quantity, stock, stock - quantity,
+            )
+
+        transaction = Transaction(
+            id=int(new_id),
+            code=product_code,
+            type=type_normalized,
+            qty=quantity,
+            date=transaction_date,
+            note=note_value,
+            name=name,
+            unit=unit,
+            user_code=user_code,
         )
-        return tx, warning
+        return transaction, warning
+
+    @staticmethod
+    def _evaluate_outgoing(
+        stock: float, qty: float, min_stock: float, unit: str
+    ) -> Optional[str]:
+        """ارزیابی هشدار برای خروج (بدون نوشتن در دیتابیس)."""
+        after = stock - qty
+
+        if after < 0:
+            return (
+                f"موجودی منفی می‌شود و موجودی کافی نیست. "
+                f"موجودی فعلی: {stock:g} {unit}؛ مقدار خروج: {qty:g} {unit}؛ "
+                f"کسری: {-after:g} {unit}."
+            )
+        if after == 0:
+            # حتی با min_stock=0 این حالت باید هشدار داشته باشد؛
+            # در non-UI گزارش به‌عنوان «ناموجود» دیده می‌شود.
+            if min_stock > 0:
+                return (
+                    f"هشدار: با این خروج، کالا ناموجود می‌شود "
+                    f"(کمتر از حداقل {min_stock:g} {unit}). "
+                    f"موجودی فعلی: {stock:g} {unit}."
+                )
+            return (
+                f"هشدار: با این خروج، موجودی کالا به صفر می‌رسد. "
+                f"موجودی فعلی: {stock:g} {unit}."
+            )
+        if after < min_stock:
+            return (
+                f"هشدار: موجودی پس از خروج کمتر از حداقل می‌شود. "
+                f"فعلی: {stock:g}؛ حداقل: {min_stock:g}؛ بعد: {after:g}."
+            )
+        return None
+
+    # ------------------------------------------------------------- delete
 
     def delete(self, tx_id: int) -> None:
         if isinstance(tx_id, bool) or not isinstance(tx_id, int) or tx_id <= 0:
             raise ValueError("شناسه تراکنش نامعتبر است.")
-        n = self.db.run("DELETE FROM transactions WHERE id=?", (tx_id,))
-        if n == 0:
+        deleted = self.db.run("DELETE FROM transactions WHERE id=?", (tx_id,))
+        if deleted == 0:
             raise ValueError(f"تراکنشی با شناسه {tx_id} یافت نشد.")
 
+    # --------------------------------------------------------------- read
+
     def all(self, limit: int = 300) -> List[Transaction]:
+        """آخرین ``limit`` تراکنش.
+
+        توجه: این متد **تمام** تراکنش‌ها را برنمی‌گرداند. برای جست‌وجو در
+        سابقهٔ کامل، از :meth:`search` با فیلتر تاریخ/کد استفاده کنید —
+        فیلتر در UI فقط روی همان ``limit`` ردیف بارگذاری‌شده اعمال می‌شود.
+        """
         if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
             raise ValueError("تعداد تراکنش‌های درخواستی نامعتبر است.")
         rows = self.db.all(
-            """
+            f"""
             SELECT t.*, p.name, p.unit, p.user_code
             FROM transactions t
-            JOIN products p ON t.code = p.code
+            LEFT JOIN products p ON p.code = t.code
             ORDER BY t.date DESC, t.id DESC
             LIMIT ?
             """,
             (limit,),
         )
-        return [
-            Transaction(
-                id=r["id"], code=r["code"], type=r["type"], qty=float(r["qty"]),
-                date=r["date"], note=r["note"] or "", name=r["name"], unit=r["unit"],
-                user_code=r["user_code"] or r["code"],
-            )
-            for r in rows
-        ]
+        return [self._row_to_transaction(row) for row in rows]
 
-    def get_stock(self, code: str) -> float:
-        p = self.products.get((code or "").strip())
-        return p.stock if p else 0.0
+    def search(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        code: Optional[str] = None,
+        limit: int = 500,
+    ) -> List[Transaction]:
+        """جست‌وجوی سابقهٔ تراکنش‌ها با فیلتر تاریخ و کد."""
+        start = validate_transaction_date(start_date) if start_date else None
+        end = validate_transaction_date(end_date) if end_date else None
+        if start and end and start > end:
+            raise ValueError("تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.")
+
+        clauses: list[str] = []
+        params: list[object] = []
+        if start:
+            clauses.append("t.date >= ?")
+            params.append(start)
+        if end:
+            clauses.append("t.date <= ?")
+            params.append(end)
+        if code:
+            value = str(code).strip()
+            if value:
+                clauses.append("(t.code = ? OR p.user_code = ?)")
+                params.extend([value, value])
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise ValueError("تعداد تراکنش‌های درخواستی نامعتبر است.")
+        params.append(limit)
+
+        rows = self.db.all(
+            f"""
+            SELECT t.*, p.name, p.unit, p.user_code
+            FROM transactions t
+            LEFT JOIN products p ON p.code = t.code
+            {where}
+            ORDER BY t.date DESC, t.id DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        )
+        return [self._row_to_transaction(row) for row in rows]
+
+    def get(self, tx_id: int) -> Optional[Transaction]:
+        if isinstance(tx_id, bool) or not isinstance(tx_id, int) or tx_id <= 0:
+            raise ValueError("شناسه تراکنش نامعتبر است.")
+        row = self.db.one(
+            """
+            SELECT t.*, p.name, p.unit, p.user_code
+            FROM transactions t
+            LEFT JOIN products p ON p.code = t.code
+            WHERE t.id = ?
+            """,
+            (tx_id,),
+        )
+        return self._row_to_transaction(row) if row else None
+
+    def count(self) -> int:
+        row = self.db.one("SELECT COUNT(*) AS c FROM transactions")
+        return int(row["c"]) if row else 0
+
+    @staticmethod
+    def _row_to_transaction(row) -> Transaction:
+        return Transaction(
+            id=int(row["id"]),
+            code=row["code"],
+            type=row["type"],
+            qty=float(row["qty"]),
+            date=row["date"],
+            note=row["note"] or "",
+            name=row["name"] or "",
+            unit=row["unit"] or "",
+            user_code=(row["user_code"] if "user_code" in row.keys() and row["user_code"]
+                       else row["code"]),
+        )
+
+    # --------------------------------------------------------------- stock
+
+    def get_stock(self, code: str) -> Optional[float]:
+        """موجودی فعلی کالا یا ``None`` اگر کالا وجود نداشته باشد.
+
+        ``None`` از ``0.0`` متمایز است: کالای موجود با موجودی صفر
+        مقدار ``0.0`` برمی‌گرداند.
+        """
+        product = self.products.get((code or "").strip())
+        return product.stock if product else None
+
+
+__all__ = [
+    "STOCK_CASE",
+    "TransactionService",
+    "parse_positive_qty",
+    "validate_transaction_date",
+]
