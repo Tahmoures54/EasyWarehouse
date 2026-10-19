@@ -52,3 +52,9 @@ def test_list_products(svc):
     assert len(svc.all()) == 2
     assert len(svc.all("مصرفی")) == 1
     assert len(svc.combo_items()) == 2
+
+
+@pytest.mark.parametrize("bad_minimum", [-1, float("nan"), float("inf"), "not-a-number"])
+def test_reject_invalid_minimum_stock(svc, bad_minimum):
+    with pytest.raises(ValueError):
+        svc.add("حداقل نامعتبر", min_stock=bad_minimum)
