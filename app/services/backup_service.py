@@ -7,6 +7,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
@@ -29,7 +30,7 @@ class BackupService:
         try:
             # mode=ro prevents a validation attempt from modifying the candidate file.
             uri = path.resolve().as_uri() + "?mode=ro"
-            with sqlite3.connect(uri, uri=True, timeout=5) as conn:
+            with closing(sqlite3.connect(uri, uri=True, timeout=5)) as conn:
                 result = conn.execute("PRAGMA integrity_check").fetchone()
                 if not result or result[0] != "ok":
                     raise ValueError("سلامت ساختاری فایل پشتیبان تأیید نشد.")
@@ -60,8 +61,8 @@ class BackupService:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         target = dest_dir / f"anbar_backup_{stamp}.db"
         try:
-            with sqlite3.connect(str(self.db_path), timeout=10) as source:
-                with sqlite3.connect(str(target), timeout=10) as destination:
+            with closing(sqlite3.connect(str(self.db_path), timeout=10)) as source:
+                with closing(sqlite3.connect(str(target), timeout=10)) as destination:
                     source.backup(destination)
             self._validate_sqlite(target)
             return target
