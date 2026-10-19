@@ -271,7 +271,7 @@ class MainWindow(tk.Tk):
             tree.delete(*tree.get_children())
             query = product_search_var.get().strip().casefold()
             for p in self.ps.all():
-                if query and query not in f"{p.code} {p.name} {p.category} {p.shelf or ''}".casefold():
+                if query and query not in f"{p.user_code} {p.code} {p.name} {p.category} {p.shelf or ''}".casefold():
                     continue
                 tree.insert("", tk.END, iid=p.code, values=(
                     p.user_code or p.code, p.name, p.unit, p.category, p.shelf or "—",
