@@ -73,6 +73,44 @@ class DB:
             raise DatabaseError("فایل schema.sql یافت نشد.")
         try:
             with closing(self._connect()) as conn:
+                # Upgrade legacy product tables in place. The internal code remains
+                # stable for transaction foreign keys; user_code is the editable,
+                # non-unique business code. Rebuild only the products table so the
+                # old UNIQUE(name) constraint is removed without losing transactions.
+                conn.execute("PRAGMA foreign_keys = OFF")
+                product_cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
+                if product_cols and ("user_code" not in product_cols or "UNIQUE(name)" in (
+                    (conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='products'").fetchone() or [""])[0] or ""
+                ).replace(" ", "")):
+                    conn.execute("BEGIN")
+                    conn.execute("""
+                        CREATE TABLE products_new (
+                            code TEXT PRIMARY KEY,
+                            user_code TEXT NOT NULL DEFAULT '',
+                            name TEXT NOT NULL,
+                            unit TEXT NOT NULL DEFAULT 'عدد',
+                            min_stock REAL NOT NULL DEFAULT 0,
+                            category TEXT NOT NULL DEFAULT 'عمومی',
+                            shelf TEXT NOT NULL DEFAULT ''
+                        )
+                    """)
+                    old_names = set(product_cols)
+                    select_user_code = "user_code" if "user_code" in old_names else "code"
+                    select_category = "category" if "category" in old_names else "'عمومی'"
+                    select_shelf = "shelf" if "shelf" in old_names else "''"
+                    conn.execute(f"""
+                        INSERT INTO products_new(code, user_code, name, unit, min_stock, category, shelf)
+                        SELECT code, COALESCE(NULLIF({select_user_code}, ''), code), name,
+                               COALESCE(unit, 'عدد'), COALESCE(min_stock, 0),
+                               COALESCE({select_category}, 'عمومی'), COALESCE({select_shelf}, '')
+                        FROM products
+                    """)
+                    conn.execute("DROP TABLE products")
+                    conn.execute("ALTER TABLE products_new RENAME TO products")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_name ON products(name)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_cat ON products(category)")
+                    conn.commit()
+                conn.execute("PRAGMA foreign_keys = ON")
                 conn.executescript(schema_file.read_text(encoding="utf-8"))
                 cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
                 if "category" not in cols:
