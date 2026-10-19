@@ -9,7 +9,7 @@ from pathlib import Path
 
 APP_NAME = "EasyWarehouse"
 APP_TITLE = "EasyWarehouse - مدیریت انبار"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 APP_AUTHOR = "Tahmoures54"
 APP_LICENSE = "MIT"
 GITHUB_URL = "https://github.com/Tahmoures54/EasyWarehouse"
