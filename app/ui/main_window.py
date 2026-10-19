@@ -254,7 +254,7 @@ class MainWindow(tk.Tk):
         cols = ("code", "name", "unit", "cat", "shelf", "min", "stock")
         tree = ttk.Treeview(win, columns=cols, show="headings", height=14)
         for c, h, w in [
-            ("code", "کد", 55), ("name", "نام", 190), ("unit", "واحد", 55),
+            ("code", "کد کالا", 110), ("name", "نام", 190), ("unit", "واحد", 55),
             ("cat", "دسته", 70), ("shelf", "قفسه", 90), ("min", "حداقل", 55), ("stock", "موجودی", 65),
         ]:
             tree.heading(c, text=h)
