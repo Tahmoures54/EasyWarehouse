@@ -273,8 +273,8 @@ class MainWindow(tk.Tk):
             for p in self.ps.all():
                 if query and query not in f"{p.code} {p.name} {p.category} {p.shelf or ''}".casefold():
                     continue
-                tree.insert("", tk.END, values=(
-                    p.code, p.name, p.unit, p.category, p.shelf or "—",
+                tree.insert("", tk.END, iid=p.code, values=(
+                    p.user_code or p.code, p.name, p.unit, p.category, p.shelf or "—",
                     f"{p.min_stock:g}", f"{p.stock:g}",
                 ))
 
@@ -282,7 +282,7 @@ class MainWindow(tk.Tk):
             sel = tree.selection()
             if not sel:
                 return
-            code = tree.item(sel[0], "values")[0]
+            code = sel[0]
             p = self.ps.get(code)
             if p:
                 ProductForm(win, self.ps, product=p, on_save=lambda: (load(), self.refresh()))
@@ -291,8 +291,9 @@ class MainWindow(tk.Tk):
             sel = tree.selection()
             if not sel:
                 return
-            code = tree.item(sel[0], "values")[0]
-            if not messagebox.askyesno("تأیید", f"حذف کالای {code}؟", parent=win):
+            code = sel[0]
+            selected = tree.item(sel[0], "values")
+            if not messagebox.askyesno("تأیید", f"حذف کالای {selected[0]} - {selected[1]}؟", parent=win):
                 return
             try:
                 self.ps.delete(code)
@@ -328,8 +329,7 @@ class MainWindow(tk.Tk):
             create_product_template(path)
             messagebox.showinfo(
                 "الگوی Excel آماده است",
-                "فایل الگو ذخیره شد. اطلاعات را در برگه «فهرست کالاها» و زیر عنوان‌ها وارد کنید. "
-                "کد کالا خودکار تولید می‌شود و موجودی اولیه صفر خواهد بود.",
+                "فایل الگو ذخیره شد. کد و نام کالا را وارد کنید؛ تکراری بودن هرکدام هشدار می‌دهد اما با تأیید شما مانع ورود نیست. شناسه داخلی خودکار ساخته می‌شود و موجودی اولیه صفر خواهد بود.",
                 parent=parent,
             )
         except Exception as exc:
@@ -344,7 +344,7 @@ class MainWindow(tk.Tk):
             return
         try:
             from app.services.product_excel_service import preview_product_import, import_product_rows
-            rows, errors, total_rows = preview_product_import(path, self.ps)
+            rows, errors, total_rows, warnings = preview_product_import(path, self.ps)
             if not rows and not errors:
                 messagebox.showinfo("ورود کالا", "فایل ردیف کالای قابل ورود ندارد.", parent=parent)
                 return
@@ -358,7 +358,12 @@ class MainWindow(tk.Tk):
                 preview.extend(errors[:12])
                 if len(errors) > 12:
                     preview.append(f"... و {len(errors) - 12} خطای دیگر")
-            preview.extend(["", "کد کالا خودکار تولید می‌شود؛ موجودی اولیه صفر است."])
+            if warnings:
+                preview.extend(["", "هشدارهای تکراری (در صورت تأیید، وارد می‌شوند):"])
+                preview.extend(warnings[:12])
+                if len(warnings) > 12:
+                    preview.append(f"... و {len(warnings) - 12} هشدار دیگر")
+            preview.extend(["", "کد کالا از فایل خوانده می‌شود؛ شناسه داخلی خودکار ساخته می‌شود و موجودی اولیه صفر است."])
             if not rows:
                 messagebox.showwarning("نتیجه بررسی فایل", "\n".join(preview), parent=parent)
                 return
@@ -374,7 +379,8 @@ class MainWindow(tk.Tk):
             messagebox.showinfo(
                 "ورود کامل شد",
                 f"{imported} کالا با موفقیت وارد شد."
-                + (f"\n{len(errors)} ردیف به دلیل خطا یا تکراری بودن رد شد." if errors else ""),
+                + (f"\n{len(errors)} ردیف به دلیل خطای داده رد شد." if errors else "")
+                + (f"\n{len(warnings)} هشدار تکراری با تأیید شما پذیرفته شد." if warnings else ""),
                 parent=parent,
             )
         except Exception as exc:
