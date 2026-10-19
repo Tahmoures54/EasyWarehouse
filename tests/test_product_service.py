@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -64,3 +65,42 @@ def test_list_products(svc):
 def test_reject_invalid_minimum_stock(svc, bad_minimum):
     with pytest.raises(ValueError):
         svc.add("حداقل نامعتبر", min_stock=bad_minimum)
+
+
+def test_legacy_database_migration_preserves_transactions_and_allows_duplicate_names(tmp_path):
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE products (
+            code TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            unit TEXT NOT NULL DEFAULT 'عدد',
+            min_stock REAL NOT NULL DEFAULT 0,
+            category TEXT NOT NULL DEFAULT 'عمومی',
+            shelf TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('IN','OUT','RETURN')),
+            qty REAL NOT NULL CHECK(qty > 0),
+            date TEXT NOT NULL,
+            note TEXT,
+            FOREIGN KEY(code) REFERENCES products(code)
+        );
+        INSERT INTO products(code, name, unit, min_stock) VALUES ('P001', 'آب معدنی', 'عدد', 1);
+        INSERT INTO transactions(code, type, qty, date) VALUES ('P001', 'IN', 3, '2026-10-19');
+    """)
+    conn.commit()
+    conn.close()
+
+    migrated = ProductService(DB(path=path))
+    original = migrated.get("P001")
+    assert original.user_code == "P001"
+    assert original.stock == 3
+    second = migrated.add("آب معدنی", user_code="10080")
+    assert second.user_code == "10080"
+    assert migrated.get("P001").stock == 3
+    assert migrated.get(second.code).stock == 0
+    with sqlite3.connect(path) as check:
+        assert check.execute("PRAGMA foreign_key_check").fetchall() == []
