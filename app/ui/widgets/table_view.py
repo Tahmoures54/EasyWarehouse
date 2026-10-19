@@ -57,7 +57,7 @@ class TxTable(ttk.Frame):
         items = self._items
         if self._query:
             items = [t for t in items if self._query in " ".join((
-                str(t.id), str(t.date), str(t.code), t.name, t.type_fa(),
+                str(t.id), str(t.date), str(t.user_code or t.code), t.name, t.type_fa(),
                 f"{t.qty:g}", t.unit, t.note,
             )).casefold()]
         for i, t in enumerate(items):
@@ -65,7 +65,7 @@ class TxTable(ttk.Frame):
             self.tree.insert(
                 "",
                 tk.END,
-                values=(t.id, t.date, t.code, t.name, t.type_fa(), f"{t.qty:g}", t.unit, t.note),
+                values=(t.id, t.date, t.user_code or t.code, t.name, t.type_fa(), f"{t.qty:g}", t.unit, t.note),
                 tags=(t.type, row_tag),
             )
 

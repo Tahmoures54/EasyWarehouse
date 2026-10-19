@@ -91,7 +91,7 @@ class TransactionService:
         with self.db.transaction() as conn:
             row = conn.execute(
                 """
-                SELECT p.code, p.name, p.unit, p.min_stock,
+                SELECT p.code, p.user_code, p.name, p.unit, p.min_stock,
                        COALESCE(SUM(
                            CASE WHEN t.type IN ('IN','RETURN') THEN t.qty
                                 WHEN t.type='OUT' THEN -t.qty ELSE 0 END
@@ -132,7 +132,7 @@ class TransactionService:
 
         tx = Transaction(
             id=tid, code=code, type=type_, qty=qty, date=date_str,
-            note=clean_note or "", name=row["name"], unit=unit,
+            note=clean_note or "", name=row["name"], unit=unit, user_code=row["user_code"],
         )
         return tx, warning
 
@@ -148,7 +148,7 @@ class TransactionService:
             raise ValueError("تعداد تراکنش‌های درخواستی نامعتبر است.")
         rows = self.db.all(
             """
-            SELECT t.*, p.name, p.unit
+            SELECT t.*, p.name, p.unit, p.user_code
             FROM transactions t
             JOIN products p ON t.code = p.code
             ORDER BY t.date DESC, t.id DESC
@@ -160,6 +160,7 @@ class TransactionService:
             Transaction(
                 id=r["id"], code=r["code"], type=r["type"], qty=float(r["qty"]),
                 date=r["date"], note=r["note"] or "", name=r["name"], unit=r["unit"],
+                user_code=r["user_code"] or r["code"],
             )
             for r in rows
         ]

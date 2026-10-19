@@ -2,7 +2,8 @@
 
 CREATE TABLE IF NOT EXISTS products (
     code      TEXT PRIMARY KEY,
-    name      TEXT NOT NULL UNIQUE,
+    user_code TEXT NOT NULL DEFAULT '',
+    name      TEXT NOT NULL,
     unit      TEXT NOT NULL DEFAULT 'عدد',
     min_stock REAL NOT NULL DEFAULT 0,
     category  TEXT NOT NULL DEFAULT 'عمومی',

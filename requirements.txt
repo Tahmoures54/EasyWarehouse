@@ -1,6 +1,7 @@
 # وابستگی‌های توسعه و ساخت
-# اجرای برنامه فقط به tkinter و sqlite3 استاندارد نیاز دارد.
+# رابط کاربری از tkinter و دیتابیس از sqlite3 استفاده می‌کند؛ openpyxl برای فایل‌های Excel لازم است.
 
+openpyxl>=3.1.0
 pyinstaller>=6.0.0
 pytest>=7.0.0
 pytest-cov>=4.0.0

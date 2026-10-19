@@ -28,13 +28,14 @@ class ProductForm(tk.Toplevel):
         self.product = product
         self.on_save = on_save
         self.title("ویرایش کالا" if product else "کالای جدید")
-        self.geometry("420x300")
+        self.geometry("440x350")
         self.resizable(False, False)
         self.configure(bg=T.BG)
         self.transient(master)
         self.grab_set()
         self._build()
         if product:
+            self.user_code_var.set(product.user_code or product.code)
             self.name_var.set(product.name)
             self.unit_var.set(product.unit)
             self.min_var.set(self._fmt(product.min_stock))
@@ -49,32 +50,36 @@ class ProductForm(tk.Toplevel):
         f = ttk.Frame(self, padding=16)
         f.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(f, text="نام کالا:").grid(row=0, column=0, sticky="e", pady=5, padx=4)
-        self.name_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.name_var, width=30).grid(row=0, column=1, sticky="w", pady=5)
+        ttk.Label(f, text="کد کالا:").grid(row=0, column=0, sticky="e", pady=5, padx=4)
+        self.user_code_var = tk.StringVar()
+        ttk.Entry(f, textvariable=self.user_code_var, width=30).grid(row=0, column=1, sticky="w", pady=5)
 
-        ttk.Label(f, text="واحد:").grid(row=1, column=0, sticky="e", pady=5, padx=4)
+        ttk.Label(f, text="نام کالا:").grid(row=1, column=0, sticky="e", pady=5, padx=4)
+        self.name_var = tk.StringVar()
+        ttk.Entry(f, textvariable=self.name_var, width=30).grid(row=1, column=1, sticky="w", pady=5)
+
+        ttk.Label(f, text="واحد:").grid(row=2, column=0, sticky="e", pady=5, padx=4)
         self.unit_var = tk.StringVar(value="عدد")
         ttk.Combobox(f, textvariable=self.unit_var, values=list(UNITS), width=28).grid(
-            row=1, column=1, sticky="w", pady=5
+            row=2, column=1, sticky="w", pady=5
         )
 
-        ttk.Label(f, text="حداقل موجودی:").grid(row=2, column=0, sticky="e", pady=5, padx=4)
+        ttk.Label(f, text="حداقل موجودی:").grid(row=3, column=0, sticky="e", pady=5, padx=4)
         self.min_var = tk.StringVar(value="0")
-        ttk.Entry(f, textvariable=self.min_var, width=30).grid(row=2, column=1, sticky="w", pady=5)
+        ttk.Entry(f, textvariable=self.min_var, width=30).grid(row=3, column=1, sticky="w", pady=5)
 
-        ttk.Label(f, text="دسته:").grid(row=3, column=0, sticky="e", pady=5, padx=4)
+        ttk.Label(f, text="دسته:").grid(row=4, column=0, sticky="e", pady=5, padx=4)
         self.cat_var = tk.StringVar(value="مصرفی")
         ttk.Combobox(f, textvariable=self.cat_var, values=list(CATEGORIES), state="readonly", width=28).grid(
-            row=3, column=1, sticky="w", pady=5
+            row=4, column=1, sticky="w", pady=5
         )
 
-        ttk.Label(f, text="قفسه:").grid(row=4, column=0, sticky="e", pady=5, padx=4)
+        ttk.Label(f, text="قفسه:").grid(row=5, column=0, sticky="e", pady=5, padx=4)
         self.shelf_var = tk.StringVar()
-        ttk.Entry(f, textvariable=self.shelf_var, width=30).grid(row=4, column=1, sticky="w", pady=5)
+        ttk.Entry(f, textvariable=self.shelf_var, width=30).grid(row=5, column=1, sticky="w", pady=5)
 
         bf = ttk.Frame(f)
-        bf.grid(row=5, column=0, columnspan=2, pady=16)
+        bf.grid(row=6, column=0, columnspan=2, pady=16)
         ttk.Button(bf, text="ذخیره", style="Primary.TButton", command=self._save, width=12).pack(
             side=tk.LEFT, padx=6
         )
@@ -106,13 +111,20 @@ class ProductForm(tk.Toplevel):
         unit = self.unit_var.get().strip() or "عدد"
         cat = self.cat_var.get()
         shelf = self.shelf_var.get().strip()
+        user_code = self.user_code_var.get().strip()
+        if not user_code:
+            messagebox.showerror("خطا", "کد کالا را وارد کنید.", parent=self)
+            return
+        warnings = self.service.duplicate_warnings(name, user_code, self.product.code if self.product else None)
+        if warnings and not messagebox.askyesno("هشدار تکراری بودن کالا", "\n".join(warnings) + "\n\nبا وجود هشدار، ثبت را ادامه می‌دهید؟", parent=self):
+            return
         try:
             if self.product:
-                self.service.update(self.product.code, name, unit, mn, cat, shelf)
+                self.service.update(self.product.code, name, unit, mn, cat, shelf, user_code)
                 messagebox.showinfo("موفق", "کالا ویرایش شد.", parent=self)
             else:
-                p = self.service.add(name, unit, mn, cat, shelf)
-                messagebox.showinfo("موفق", f"کالا با کد «{p.code}» ثبت شد.", parent=self)
+                p = self.service.add(name, unit, mn, cat, shelf, user_code)
+                messagebox.showinfo("موفق", f"کالا با کد «{p.user_code}» ثبت شد.", parent=self)
         except Exception as exc:
             messagebox.showerror("خطا", str(exc), parent=self)
             return
