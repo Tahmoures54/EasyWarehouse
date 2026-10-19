@@ -12,6 +12,7 @@ from app.database.db_manager import DB, DatabaseError
 from app.services.product_service import ProductService
 from app.services.transaction_service import TransactionService
 from app.services.backup_service import BackupService
+from app.services.report_service import ReportService
 from app.ui.theme import apply_theme
 from app.ui import theme as T
 from app.ui.forms.transaction_form import TransactionForm
@@ -42,6 +43,7 @@ class MainWindow(tk.Tk):
         self.ps = ProductService(self.db)
         self.ts = TransactionService(self.db)
         self.backup = BackupService()
+        self.reports = ReportService(self.db)
 
         self._build_menu()
         self._build_ui()
@@ -69,6 +71,12 @@ class MainWindow(tk.Tk):
         prod_m.add_command(label="کالای جدید", command=self._add_product)
         prod_m.add_command(label="لیست کالاها", command=self._list_products)
         menubar.add_cascade(label="کالاها", menu=prod_m)
+
+        report_m = tk.Menu(menubar, tearoff=0)
+        report_m.add_command(label="گزارش وضعیت موجودی (CSV)...", command=self._export_inventory_report)
+        report_m.add_command(label="گزارش کمبود و ناموجودی (CSV)...", command=self._export_low_stock_report)
+        report_m.add_command(label="گزارش گردش تراکنش‌ها (CSV)...", command=self._export_transaction_report)
+        menubar.add_cascade(label="گزارش‌ها", menu=report_m)
 
         help_m = tk.Menu(menubar, tearoff=0)
         help_m.add_command(label="راهنمای کاربر\tF1", command=self._help)
@@ -259,6 +267,25 @@ class MainWindow(tk.Tk):
             messagebox.showinfo("بازیابی", "بازیابی با موفقیت انجام شد.")
         except Exception as exc:
             messagebox.showerror("خطا", str(exc))
+
+    def _export_inventory_report(self) -> None:
+        self._save_report("گزارش موجودی", "inventory.csv", lambda path: self.reports.export_inventory_csv(path))
+
+    def _export_low_stock_report(self) -> None:
+        self._save_report("گزارش کمبود موجودی", "low-stock.csv", lambda path: self.reports.export_inventory_csv(path, low_only=True))
+
+    def _export_transaction_report(self) -> None:
+        self._save_report("گزارش گردش تراکنش‌ها", "transactions.csv", lambda path: self.reports.export_transactions_csv(path))
+
+    def _save_report(self, title: str, filename: str, exporter) -> None:
+        path = filedialog.asksaveasfilename(title=title, defaultextension=".csv", initialfile=filename, filetypes=[("CSV سازگار با Excel", "*.csv")])
+        if not path:
+            return
+        try:
+            saved = exporter(path)
+            messagebox.showinfo(title, f"گزارش ذخیره شد:\n{saved}")
+        except Exception as exc:
+            messagebox.showerror("خطا در تهیه گزارش", str(exc))
 
     def _help(self) -> None:
         HelpWindow(self)
