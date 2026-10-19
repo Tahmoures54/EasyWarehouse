@@ -78,7 +78,7 @@ class TransactionForm(ttk.LabelFrame):
             qty = parse_positive_qty(self.qty_var.get())
             tx_date = validate_transaction_date(self.date_var.get())
             tx, warn = self.ts.add(code, self.type_var.get(), qty, tx_date, self.note_var.get().strip())
-        except (ValueError, Exception) as exc:
+        except Exception as exc:
             messagebox.showerror("خطا", str(exc))
             return
         if warn:
