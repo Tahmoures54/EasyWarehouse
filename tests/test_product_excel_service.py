@@ -30,7 +30,8 @@ def test_template_has_persian_headers_and_instructions(tmp_path):
     path = create_product_template(tmp_path / "template.xlsx")
     workbook = load_workbook(path, read_only=True, data_only=True)
     assert workbook["فهرست کالاها"]["A1"].value == "نام کالا"
-    assert workbook["فهرست کالاها"]["B1"].value == "واحد"
+    assert workbook["فهرست کالاها"]["A1"].value == "کد کالا"
+    assert workbook["فهرست کالاها"]["B1"].value == "نام کالا"
     assert "راهنما" in workbook.sheetnames
     assert workbook["فهرست کالاها"]["A2"].value is None
     workbook.close()
@@ -44,25 +45,26 @@ def test_preview_rejects_duplicates_and_invalid_rows(tmp_path, service):
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "فهرست کالاها"
-    sheet.append(["نام کالا", "واحد", "حداقل موجودی", "دسته", "قفسه"])
-    sheet.append(["کالای جدید", "عدد", 5, "مصرفی", "A1"])
-    sheet.append(["کالای موجود", "عدد", 0, "عمومی", ""])
-    sheet.append(["کالای جدید", "عدد", 2, "عمومی", ""])
-    sheet.append(["موجودی بد", "عدد", -1, "عمومی", ""])
-    sheet.append(["واحد بد", "غیرمجاز", 0, "عمومی", ""])
+    sheet.append(["کد کالا", "نام کالا", "واحد", "حداقل موجودی", "دسته", "قفسه"])
+    sheet.append(["10001", "کالای جدید", "عدد", 5, "مصرفی", "A1"])
+    sheet.append(["10002", "کالای موجود", "عدد", 0, "عمومی", ""])
+    sheet.append(["10003", "کالای جدید", "عدد", 2, "عمومی", ""])
+    sheet.append(["10004", "موجودی بد", "عدد", -1, "عمومی", ""])
+    sheet.append(["10005", "واحد بد", "غیرمجاز", 0, "عمومی", ""])
     workbook.save(path)
     workbook.close()
 
-    rows, errors, total = preview_product_import(path, service)
+    rows, errors, total, warnings = preview_product_import(path, service)
     assert total == 5
-    assert [row["name"] for row in rows] == ["کالای جدید"]
-    assert len(errors) == 4
+    assert [row["name"] for row in rows] == ["کالای جدید", "کالای موجود", "کالای جدید"]
+    assert len(errors) == 2
+    assert len(warnings) == 2
 
 
 def test_import_is_atomic_and_generates_codes(tmp_path, service):
     rows = [
-        {"name": "کالای یک", "unit": "عدد", "min_stock": 1, "category": "عمومی", "shelf": ""},
-        {"name": "کالای دو", "unit": "جعبه", "min_stock": 2, "category": "مصرفی", "shelf": "B2"},
+        {"user_code": "101", "name": "کالای یک", "unit": "عدد", "min_stock": 1, "category": "عمومی", "shelf": ""},
+        {"user_code": "102", "name": "کالای دو", "unit": "جعبه", "min_stock": 2, "category": "مصرفی", "shelf": "B2"},
     ]
     assert import_product_rows(service, rows) == 2
     assert service.get("P001").name == "کالای یک"
@@ -70,9 +72,9 @@ def test_import_is_atomic_and_generates_codes(tmp_path, service):
     assert service.get("P002").stock == 0
 
     duplicate_rows = [
-        {"name": "کالای سه", "unit": "عدد", "min_stock": 0, "category": "عمومی", "shelf": ""},
-        {"name": "کالای یک", "unit": "عدد", "min_stock": 0, "category": "عمومی", "shelf": ""},
+        {"user_code": "103", "name": "کالای سه", "unit": "عدد", "min_stock": 0, "category": "عمومی", "shelf": ""},
+        {"user_code": "104", "name": "کالای یک", "unit": "عدد", "min_stock": 0, "category": "عمومی", "shelf": ""},
     ]
-    with pytest.raises(ValueError, match="تکراری"):
-        import_product_rows(service, duplicate_rows)
-    assert service.get("P003") is None
+    assert import_product_rows(service, duplicate_rows) == 2
+    assert service.get("P003").name == "کالای سه"
+    assert service.get("P004").name == "کالای یک"
