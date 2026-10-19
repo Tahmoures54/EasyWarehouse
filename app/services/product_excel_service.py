@@ -14,7 +14,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from app.config import CATEGORIES, PRODUCT_CODE_PADDING, PRODUCT_CODE_PREFIX, UNITS
 from app.services.product_service import ProductService
 
-HEADERS = ("نام کالا", "واحد", "حداقل موجودی", "دسته", "قفسه")
+HEADERS = ("کد کالا", "نام کالا", "واحد", "حداقل موجودی", "دسته", "قفسه")
 DEFAULT_UNIT = "عدد"
 DEFAULT_CATEGORY = "عمومی"
 
@@ -28,15 +28,15 @@ def create_product_template(path: str | Path) -> Path:
     sheet.sheet_view.rightToLeft = True
     sheet.append(HEADERS)
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = "A1:E1000"
+    sheet.auto_filter.ref = "A1:F1000"
     sheet.row_dimensions[1].height = 28
     for cell in sheet[1]:
         cell.font = Font(name="Tahoma", bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="102A43")
         cell.alignment = Alignment(horizontal="center", vertical="center")
-    for col, width in {"A": 30, "B": 16, "C": 20, "D": 18, "E": 20}.items():
+    for col, width in {"A": 20, "B": 30, "C": 16, "D": 20, "E": 18, "F": 20}.items():
         sheet.column_dimensions[col].width = width
-    sheet.append([None, None, None, None, None])
+    sheet.append([None, None, None, None, None, None])
     sheet["A2"].comment = Comment(
         "این ردیف نمونه نیست؛ اطلاعات کالای واقعی را در آن وارد کنید یا ردیف را خالی بگذارید.",
         "EasyWarehouse",
@@ -45,9 +45,9 @@ def create_product_template(path: str | Path) -> Path:
     categories = DataValidation(type="list", formula1='"' + ",".join(CATEGORIES) + '"', allow_blank=True)
     minimum = DataValidation(type="decimal", operator="greaterThanOrEqual", formula1="0", allow_blank=True)
     for validation, message, cell_range in (
-        (units, "واحد را از فهرست انتخاب کنید.", "B2:B1000"),
-        (categories, "دسته را از فهرست انتخاب کنید.", "D2:D1000"),
-        (minimum, "حداقل موجودی باید صفر یا بیشتر باشد.", "C2:C1000"),
+        (units, "واحد را از فهرست انتخاب کنید.", "C2:C1000"),
+        (categories, "دسته را از فهرست انتخاب کنید.", "E2:E1000"),
+        (minimum, "حداقل موجودی باید صفر یا بیشتر باشد.", "D2:D1000"),
     ):
         validation.error = message
         sheet.add_data_validation(validation)
@@ -58,14 +58,15 @@ def create_product_template(path: str | Path) -> Path:
     guide.column_dimensions["B"].width = 90
     guide.append(["ستون", "راهنما"])
     guidance = [
-        ("نام کالا", "اجباری؛ نام کالا باید یکتا باشد."),
+        ("کد کالا", "اجباری؛ توسط کاربر تعیین می‌شود. تکراری بودن کد فقط هشدار است."),
+        ("نام کالا", "اجباری؛ نام تکراری فقط هشدار است و با تأیید کاربر قابل ورود است."),
         ("واحد", "اختیاری؛ اگر خالی باشد «عدد» ثبت می‌شود."),
         ("حداقل موجودی", "اختیاری؛ عدد صفر یا مثبت. پیش‌فرض صفر."),
-        ("دسته", "اختیاری؛ مصرفی، تکنیکال یا عمومی. پیش‌فرض عمومی."),
+        ("دسته", "اختیاری؛ از فهرست انتخاب شود. پیش‌فرض عمومی."),
         ("قفسه", "اختیاری؛ محل نگهداری کالا."),
-        ("کد کالا", "در فایل وارد نمی‌شود؛ برنامه کد یکتا را خودکار تولید می‌کند."),
+        ("شناسه داخلی", "برنامه شناسه مستقل می‌سازد تا گردش‌ها با کد تکراری هم درست بمانند."),
         ("موجودی اولیه", "از فایل وارد نمی‌شود و صفر است؛ گردش ورود را از فرم اصلی ثبت کنید."),
-        ("ورود گروهی", "ردیف‌های نامعتبر یا کالاهای تکراری رد می‌شوند؛ ردیف‌های معتبر پس از تأیید وارد می‌شوند."),
+        ("ورود گروهی", "تکرار کد یا نام هشدار دارد، اما ردیف معتبر پس از تأیید کاربر وارد می‌شود."),
     ]
     for row in guidance:
         guide.append(row)
@@ -101,10 +102,14 @@ def preview_product_import(path: str | Path, service: ProductService):
         positions = {name: normalized.index(name) for name in HEADERS if name in normalized}
         if "نام کالا" not in positions:
             raise ValueError("ستون «نام کالا» در ردیف اول فایل پیدا نشد. از الگوی رسمی برنامه استفاده کنید.")
-        existing_names = {p.name.casefold() for p in service.all()}
+        existing_products = service.all()
+        existing_names = {service.normalize_name(p.name) for p in existing_products}
+        existing_codes = {p.user_code.casefold() for p in existing_products}
         accepted_names: set[str] = set()
+        accepted_codes: set[str] = set()
         valid: list[dict[str, Any]] = []
         errors: list[str] = []
+        warnings: list[str] = []
         total_rows = 0
         for excel_row, values in enumerate(iterator, start=2):
             values = values or ()
@@ -116,6 +121,7 @@ def preview_product_import(path: str | Path, service: ProductService):
                 index = positions.get(column)
                 return values[index] if index is not None and index < len(values) else default
 
+            user_code = _text(get("کد کالا"))
             name = _text(get("نام کالا"))
             unit = _text(get("واحد", DEFAULT_UNIT)) or DEFAULT_UNIT
             category = _text(get("دسته", DEFAULT_CATEGORY)) or DEFAULT_CATEGORY
@@ -125,6 +131,9 @@ def preview_product_import(path: str | Path, service: ProductService):
                 minimum = 0.0 if raw_min is None or _text(raw_min) == "" else float(str(raw_min).replace(",", "."))
             except (TypeError, ValueError):
                 errors.append(f"ردیف {excel_row}: حداقل موجودی باید عدد باشد.")
+                continue
+            if not user_code:
+                errors.append(f"ردیف {excel_row}: کد کالا خالی است.")
                 continue
             if not name:
                 errors.append(f"ردیف {excel_row}: نام کالا خالی است.")
@@ -138,16 +147,19 @@ def preview_product_import(path: str | Path, service: ProductService):
             if category not in CATEGORIES:
                 errors.append(f"ردیف {excel_row}: دسته «{category}» معتبر نیست.")
                 continue
-            key = name.casefold()
+            key = service.normalize_name(name)
+            code_key = user_code.casefold()
             if key in existing_names or key in accepted_names:
-                errors.append(f"ردیف {excel_row}: کالای «{name}» تکراری است.")
-                continue
+                warnings.append(f"ردیف {excel_row}: نام «{name}» تکراری است؛ با تأیید قابل ورود است.")
+            if code_key in existing_codes or code_key in accepted_codes:
+                warnings.append(f"ردیف {excel_row}: کد «{user_code}» تکراری است؛ با تأیید قابل ورود است.")
             accepted_names.add(key)
+            accepted_codes.add(code_key)
             valid.append({
-                "name": name, "unit": unit, "min_stock": minimum,
+                "user_code": user_code, "name": name, "unit": unit, "min_stock": minimum,
                 "category": category, "shelf": shelf, "excel_row": excel_row,
             })
-        return valid, errors, total_rows
+        return valid, errors, total_rows, warnings
     finally:
         workbook.close()
 
@@ -156,32 +168,24 @@ def import_product_rows(service: ProductService, rows: list[dict[str, Any]]) -> 
     """Insert validated rows atomically and generate unique product codes."""
     if not rows:
         return 0
-    prefix, padding = PRODUCT_CODE_PREFIX, PRODUCT_CODE_PADDING
     with service.db.transaction() as conn:
-        existing = {str(row["name"]).casefold() for row in conn.execute("SELECT name FROM products")}
-        names: set[str] = set()
         for item in rows:
-            key = item["name"].strip().casefold()
-            if not key or key in existing or key in names:
-                raise ValueError(f"نام کالا «{item.get('name', '')}» تکراری است؛ فایل را دوباره بررسی کنید.")
+            user_code = str(item.get("user_code", "")).strip()
+            name = str(item.get("name", "")).strip()
+            if not user_code or not name:
+                raise ValueError("کد و نام کالا الزامی است.")
             if not math.isfinite(float(item["min_stock"])) or float(item["min_stock"]) < 0:
-                raise ValueError(f"حداقل موجودی کالای «{item['name']}» نامعتبر است.")
-            names.add(key)
-        codes = [str(row["code"]) for row in conn.execute("SELECT code FROM products")]
-        numbers = []
-        for code in codes:
-            if code.startswith(prefix):
-                try:
-                    numbers.append(int(code[len(prefix):]))
-                except ValueError:
-                    pass
+                raise ValueError(f"حداقل موجودی کالای «{name}» نامعتبر است.")
+        existing_codes = [str(row["code"]) for row in conn.execute("SELECT code FROM products")]
+        numbers = [int(code[len(PRODUCT_CODE_PREFIX):]) for code in existing_codes
+                   if code.startswith(PRODUCT_CODE_PREFIX) and code[len(PRODUCT_CODE_PREFIX):].isdigit()]
         next_number = max(numbers, default=0) + 1
         for item in rows:
-            code = f"{prefix}{next_number:0{padding}d}"
+            internal_code = f"{PRODUCT_CODE_PREFIX}{next_number:0{PRODUCT_CODE_PADDING}d}"
             next_number += 1
             conn.execute(
-                "INSERT INTO products (code, name, unit, min_stock, category, shelf) VALUES (?, ?, ?, ?, ?, ?)",
-                (code, item["name"].strip(), item["unit"], float(item["min_stock"]),
-                 item["category"], item["shelf"]),
+                "INSERT INTO products (code, user_code, name, unit, min_stock, category, shelf) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (internal_code, item["user_code"].strip(), item["name"].strip(), item["unit"],
+                 float(item["min_stock"]), item["category"], item["shelf"]),
             )
     return len(rows)
