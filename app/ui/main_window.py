@@ -248,7 +248,8 @@ class MainWindow(tk.Tk):
     def _list_products(self) -> None:
         win = tk.Toplevel(self)
         win.title("کتابخانه کالاها")
-        win.geometry("760x420")
+        win.geometry("1040x520")
+        win.minsize(960, 460)
         win.configure(bg=T.BG)
         cols = ("code", "name", "unit", "cat", "shelf", "min", "stock")
         tree = ttk.Treeview(win, columns=cols, show="headings", height=14)
