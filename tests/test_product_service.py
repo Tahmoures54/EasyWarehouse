@@ -29,10 +29,16 @@ def test_add_and_auto_code(svc):
     assert svc.get("P001").name == "دستمال"
 
 
-def test_reject_duplicate_name(svc):
-    svc.add("کالای الف")
-    with pytest.raises(ValueError, match="قبلاً ثبت"):
-        svc.add("کالای الف")
+def test_duplicate_name_and_user_code_are_warnings_not_blockers(svc):
+    first = svc.add("آب معدنی", user_code="10025")
+    second = svc.add("آب معدنی", user_code="10080")
+    third = svc.add("نوشیدنی", user_code="10025")
+    assert first.code != second.code
+    assert second.user_code == "10080"
+    assert len(svc.all()) == 3
+    assert any("کد" in warning for warning in svc.duplicate_warnings("نوشیدنی", "10025"))
+    assert any("نام" in warning for warning in svc.duplicate_warnings("آب معدنی", "20000"))
+    assert svc.normalize_name(" آب  معدني ") == svc.normalize_name("آب معدنی")
 
 
 def test_update_and_delete(svc):
