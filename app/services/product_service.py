@@ -190,17 +190,21 @@ class ProductService:
         return [self._to_product(r) for r in rows]
 
     def combo_items(self, category: Optional[str] = None) -> List[str]:
-        return [p.label() for p in self.all(category)]
+        products = self.all(category)
+        labels = [p.label() for p in products]
+        counts = {label: labels.count(label) for label in labels}
+        return [f"{label} ⟦{product.code}⟧" if counts[label] > 1 else label
+                for product, label in zip(products, labels)]
 
     def code_from_label(self, label: str) -> Optional[str]:
         if not label:
             return None
-        matches = [p for p in self.all() if p.label() == label]
-        if len(matches) == 1:
-            return matches[0].code
         marker = " ⟦"
         if marker in label and label.endswith("⟧"):
             return label.rsplit(marker, 1)[1][:-1]
+        matches = [p for p in self.all() if p.label() == label]
+        if len(matches) == 1:
+            return matches[0].code
         return None
 
     def count(self) -> int:
