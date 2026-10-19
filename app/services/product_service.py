@@ -23,6 +23,10 @@ class ProductService:
     def __init__(self, db: Optional[DB] = None) -> None:
         self.db = db or DB()
 
+    @staticmethod
+    def normalize_name(value: str) -> str:
+        return normalize_product_text(value)
+
     def next_code(self) -> str:
         """تولید کد بعدی مثل P001, P002."""
         row = self.db.one("SELECT code FROM products ORDER BY code DESC LIMIT 1")
