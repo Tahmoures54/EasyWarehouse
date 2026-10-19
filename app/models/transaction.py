@@ -22,6 +22,7 @@ class Transaction:
     note: str = ""
     name: str = ""
     unit: str = ""
+    user_code: str = ""
 
     def type_fa(self) -> str:
         return TYPES.get(self.type, self.type)
