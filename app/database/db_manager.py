@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import sqlite3
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
-from typing import Any, List, Optional, Sequence, Tuple, Union
+from typing import Any, Iterator, List, Optional, Sequence, Tuple, Union
 
 from app.config import DB_PATH, SCHEMA_PATH
 
@@ -39,6 +39,31 @@ class DB:
             if "unable to open" in msg or "readonly" in msg:
                 raise DatabaseError(f"عدم دسترسی به فایل دیتابیس:\n{self.path}") from exc
             raise DatabaseError(f"خطای دیتابیس: {exc}") from exc
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        """اجرای چند عملیات وابسته در یک تراکنش نوشتن اتمیک."""
+        conn = self._connect()
+        try:
+            # قفل نوشتن قبل از خواندن موجودی گرفته می‌شود تا دو خروج هم‌زمان
+            # نتوانند هر دو بر اساس یک موجودی قدیمی تأیید شوند.
+            conn.execute("BEGIN IMMEDIATE")
+            yield conn
+            conn.commit()
+        except sqlite3.IntegrityError as exc:
+            conn.rollback()
+            raise DatabaseError(f"نقض یکتایی یا محدودیت داده: {exc}") from exc
+        except sqlite3.OperationalError as exc:
+            conn.rollback()
+            msg = str(exc).lower()
+            if "locked" in msg or "busy" in msg:
+                raise DatabaseError("فایل دیتابیس مشغول است؛ چند لحظه بعد دوباره تلاش کنید.") from exc
+            raise DatabaseError(f"خطای عملیاتی دیتابیس: {exc}") from exc
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
         schema_file = Path(SCHEMA_PATH)

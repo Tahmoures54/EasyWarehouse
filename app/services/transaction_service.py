@@ -82,33 +82,57 @@ class TransactionService:
         if not isinstance(allow_overdraw, bool):
             raise ValueError("سیاست موجودی منفی باید روشن یا خاموش باشد.")
 
-        product = self.products.get(code)
-        if not product:
-            raise ValueError(f"کالایی با کد {code} یافت نشد.")
-
         warning: Optional[str] = None
-        if type_ == "OUT":
-            after = product.stock - qty
-            if after < 0:
-                warning = (
-                    f"موجودی منفی می‌شود و موجودی کافی نیست. موجودی فعلی: {product.stock:g} {product.unit}؛ "
-                    f"مقدار خروج: {qty:g} {product.unit}؛ کسری: {-after:g} {product.unit}."
-                )
-                if not allow_overdraw:
-                    raise ValueError(warning + "\nثبت خروج انجام نشد.")
-            elif after < product.min_stock:
-                warning = (
-                    f"هشدار: موجودی پس از خروج کمتر از حداقل می‌شود. "
-                    f"فعلی: {product.stock:g}؛ حداقل: {product.min_stock:g}؛ بعد: {after:g}."
-                )
+        clean_note = (note or "").strip() or None
 
-        tid = self.db.run(
-            "INSERT INTO transactions (code, type, qty, date, note) VALUES (?,?,?,?,?)",
-            (code, type_, qty, date_str, (note or "").strip() or None),
-        )
+        # بررسی موجودی و درج تراکنش در یک تراکنش اتمیک انجام می‌شوند.
+        # BEGIN IMMEDIATE در DB.transaction مانع تأیید خروج‌های هم‌زمان
+        # بر اساس یک مقدار موجودی قدیمی می‌شود.
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                """
+                SELECT p.code, p.name, p.unit, p.min_stock,
+                       COALESCE(SUM(
+                           CASE WHEN t.type IN ('IN','RETURN') THEN t.qty
+                                WHEN t.type='OUT' THEN -t.qty ELSE 0 END
+                       ), 0) AS stock
+                FROM products p
+                LEFT JOIN transactions t ON p.code = t.code
+                WHERE p.code = ?
+                GROUP BY p.code
+                """,
+                (code,),
+            ).fetchone()
+            if not row:
+                raise ValueError(f"کالایی با کد {code} یافت نشد.")
+
+            stock = float(row["stock"] or 0)
+            unit = row["unit"] or "عدد"
+            min_stock = float(row["min_stock"] or 0)
+            if type_ == "OUT":
+                after = stock - qty
+                if after < 0:
+                    warning = (
+                        f"موجودی منفی می‌شود و موجودی کافی نیست. موجودی فعلی: {stock:g} {unit}؛ "
+                        f"مقدار خروج: {qty:g} {unit}؛ کسری: {-after:g} {unit}."
+                    )
+                    if not allow_overdraw:
+                        raise ValueError(warning + "\nثبت خروج انجام نشد.")
+                elif after < min_stock:
+                    warning = (
+                        f"هشدار: موجودی پس از خروج کمتر از حداقل می‌شود. "
+                        f"فعلی: {stock:g}؛ حداقل: {min_stock:g}؛ بعد: {after:g}."
+                    )
+
+            cur = conn.execute(
+                "INSERT INTO transactions (code, type, qty, date, note) VALUES (?,?,?,?,?)",
+                (code, type_, qty, date_str, clean_note),
+            )
+            tid = int(cur.lastrowid)
+
         tx = Transaction(
             id=tid, code=code, type=type_, qty=qty, date=date_str,
-            note=(note or "").strip(), name=product.name, unit=product.unit,
+            note=clean_note or "", name=row["name"], unit=unit,
         )
         return tx, warning
 

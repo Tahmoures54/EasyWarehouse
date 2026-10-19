@@ -137,3 +137,15 @@ def test_non_finite_quantity_rejected(services):
     for value in (float("nan"), float("inf"), -float("inf"), 0):
         with pytest.raises(ValueError):
             ts.add(p.code, "IN", value)
+
+
+def test_foreign_keys_are_enabled_for_every_connection(services):
+    ps, _ = services
+    db = ps.db
+    with db.transaction() as conn:
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        with pytest.raises(Exception):
+            conn.execute(
+                "INSERT INTO transactions (code, type, qty, date) VALUES (?, ?, ?, ?)",
+                ("MISSING", "IN", 1, "2026-10-19"),
+            )
