@@ -29,7 +29,6 @@ def test_template_has_persian_headers_and_instructions(tmp_path):
 
     path = create_product_template(tmp_path / "template.xlsx")
     workbook = load_workbook(path, read_only=True, data_only=True)
-    assert workbook["فهرست کالاها"]["A1"].value == "نام کالا"
     assert workbook["فهرست کالاها"]["A1"].value == "کد کالا"
     assert workbook["فهرست کالاها"]["B1"].value == "نام کالا"
     assert "راهنما" in workbook.sheetnames
