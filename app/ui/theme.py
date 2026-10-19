@@ -66,8 +66,8 @@ def apply_theme(root: tk.Tk) -> ttk.Style:
 
     style.configure("Primary.TButton", background=PRIMARY, foreground="#FFFFFF", font=FONT_BOLD, padding=6)
     style.map("Primary.TButton", background=[("active", PRIMARY_HOVER), ("pressed", PRIMARY_HOVER)])
-    style.configure("Secondary.TButton", background=SECONDARY, foreground="#FFFFFF", font=FONT, padding=5)
-    style.map("Secondary.TButton", background=[("active", "#1E88E5")])
+    style.configure("Secondary.TButton", background=SECONDARY, foreground=TEXT, font=FONT_BOLD, padding=(10, 7))
+    style.map("Secondary.TButton", background=[("active", "#D4E2F0")], foreground=[("active", TEXT)])
     style.configure("Danger.TButton", background=DANGER, foreground="#FFFFFF", font=FONT, padding=5)
     style.map("Danger.TButton", background=[("active", "#E53935")])
 
