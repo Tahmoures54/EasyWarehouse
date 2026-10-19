@@ -89,7 +89,7 @@ class TransactionService:
             after = product.stock - qty
             if after < 0:
                 warning = (
-                    f"موجودی کافی نیست. موجودی فعلی: {product.stock:g} {product.unit}؛ "
+                    f"موجودی منفی می‌شود و موجودی کافی نیست. موجودی فعلی: {product.stock:g} {product.unit}؛ "
                     f"مقدار خروج: {qty:g} {product.unit}؛ کسری: {-after:g} {product.unit}."
                 )
                 if not allow_overdraw:
