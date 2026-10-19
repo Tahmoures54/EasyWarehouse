@@ -29,7 +29,7 @@ class ReportService:
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = self.db.all(
             f"""
-            SELECT p.code, p.name, p.unit, p.category, p.shelf, p.min_stock,
+            SELECT p.code, p.user_code, p.name, p.unit, p.category, p.shelf, p.min_stock,
                    COALESCE(SUM(CASE
                        WHEN t.type IN ('IN', 'RETURN') THEN t.qty
                        WHEN t.type = 'OUT' THEN -t.qty
@@ -56,7 +56,7 @@ class ReportService:
             if low_only and status == "عادی":
                 continue
             result.append({
-                "code": row["code"],
+                "code": row["user_code"] or row["code"],
                 "name": row["name"],
                 "unit": row["unit"],
                 "category": row["category"],
@@ -94,7 +94,7 @@ class ReportService:
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
         rows = self.db.all(
             f"""
-            SELECT t.id, t.date, t.code, p.name, p.unit, t.type, t.qty, t.note
+            SELECT t.id, t.date, t.code, p.user_code, p.name, p.unit, t.type, t.qty, t.note
             FROM transactions t
             JOIN products p ON p.code = t.code
             {where}
@@ -106,7 +106,7 @@ class ReportService:
         return [{
             "id": int(row["id"]),
             "date": row["date"],
-            "code": row["code"],
+            "code": row["user_code"] or row["code"],
             "name": row["name"],
             "unit": row["unit"],
             "type": labels.get(row["type"], row["type"]),
