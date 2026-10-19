@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from typing import List, Optional
+import math
 
 from app.config import PRODUCT_CODE_PADDING, PRODUCT_CODE_PREFIX
 from app.database.db_manager import DB, DatabaseError
@@ -39,8 +40,12 @@ class ProductService:
         name = (name or "").strip()
         if not name:
             raise ValueError("نام کالا نمی‌تواند خالی باشد.")
-        if min_stock < 0:
-            raise ValueError("حداقل موجودی نمی‌تواند منفی باشد.")
+        try:
+            min_stock = float(min_stock)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("حداقل موجودی باید عددی معتبر باشد.") from exc
+        if not math.isfinite(min_stock) or min_stock < 0:
+            raise ValueError("حداقل موجودی باید عددی متناهی و غیرمنفی باشد.")
         existing = self.db.one(
             "SELECT code FROM products WHERE lower(name) = lower(?)",
             (name,),
@@ -70,8 +75,12 @@ class ProductService:
         name = (name or "").strip()
         if not name:
             raise ValueError("نام کالا نمی‌تواند خالی باشد.")
-        if min_stock < 0:
-            raise ValueError("حداقل موجودی نمی‌تواند منفی باشد.")
+        try:
+            min_stock = float(min_stock)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("حداقل موجودی باید عددی معتبر باشد.") from exc
+        if not math.isfinite(min_stock) or min_stock < 0:
+            raise ValueError("حداقل موجودی باید عددی متناهی و غیرمنفی باشد.")
         dup = self.db.one(
             "SELECT code FROM products WHERE lower(name) = lower(?) AND code <> ?",
             (name, code),

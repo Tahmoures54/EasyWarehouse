@@ -50,7 +50,7 @@ def test_negative_stock_scenario(services):
     ps, ts = services
     p = ps.add("بحرانی", min_stock=0)
     ts.add(p.code, "IN", 2)
-    _, warn = ts.add(p.code, "OUT", 5)
+    _, warn = ts.add(p.code, "OUT", 5, allow_overdraw=True)
     assert warn is not None
     assert "منفی" in warn
     assert ps.get(p.code).stock == -3
@@ -102,3 +102,38 @@ def test_full_flow(services):
     ts.add(p.code, "OUT", 7)
     ts.add(p.code, "RETURN", 2)
     assert ps.get(p.code).stock == 15
+
+
+
+def test_overdraw_is_blocked_by_default(services):
+    ps, ts = services
+    p = ps.add("پیش‌فرض امن")
+    ts.add(p.code, "IN", 2)
+    with pytest.raises(ValueError, match="ثبت خروج انجام نشد"):
+        ts.add(p.code, "OUT", 3)
+    assert ps.get(p.code).stock == 2
+
+
+@pytest.mark.parametrize("bad_date", ["19-10-2026", "2026-02-30", "2026-1-01", "2026/10/19", ""])
+def test_invalid_nonempty_dates_rejected(services, bad_date):
+    ps, ts = services
+    p = ps.add("تاریخ نامعتبر")
+    with pytest.raises(ValueError, match="تاریخ"):
+        ts.add(p.code, "IN", 1, date_str=bad_date)
+
+
+def test_delete_transaction_recalculates_stock(services):
+    ps, ts = services
+    p = ps.add("حذف تراکنش")
+    tx, _ = ts.add(p.code, "IN", 8)
+    assert ps.get(p.code).stock == 8
+    ts.delete(tx.id)
+    assert ps.get(p.code).stock == 0
+
+
+def test_non_finite_quantity_rejected(services):
+    ps, ts = services
+    p = ps.add("عدد نامعتبر")
+    for value in (float("nan"), float("inf"), -float("inf"), 0):
+        with pytest.raises(ValueError):
+            ts.add(p.code, "IN", value)
