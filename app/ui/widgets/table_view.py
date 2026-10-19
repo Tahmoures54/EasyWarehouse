@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
-from typing import List, Optional
+from typing import Iterable, Optional, Sequence, Tuple
 
 from app.models.transaction import Transaction
 from app.ui import theme as T
@@ -17,63 +17,132 @@ class TxTable(ttk.Frame):
     COLS = ("id", "date", "code", "name", "type", "qty", "unit", "note")
     HEADS = ("#", "تاریخ", "کد", "نام کالا", "نوع", "مقدار", "واحد", "توضیح")
     WIDTHS = (50, 95, 70, 170, 70, 70, 60, 160)
+    # ستون‌های متنی راست‌چین (RTL)، ستون‌های عددی/کد وسط‌چین
+    ALIGNS = ("center", "center", "center", "e", "center", "center", "center", "e")
 
     def __init__(self, master: tk.Misc, **kwargs) -> None:
         super().__init__(master, **kwargs)
-        sb = ttk.Scrollbar(self)
+        self._items: Tuple[Transaction, ...] = ()
+        self._query: str = ""
+
+        self.scrollbar = ttk.Scrollbar(self)
         self.tree = ttk.Treeview(
             self,
             columns=self.COLS,
             show="headings",
-            yscrollcommand=sb.set,
+            yscrollcommand=self.scrollbar.set,
             height=12,
             selectmode="browse",
         )
-        sb.config(command=self.tree.yview)
-        for c, h, w in zip(self.COLS, self.HEADS, self.WIDTHS):
-            self.tree.heading(c, text=h, anchor="center")
-            self.tree.column(c, width=w, anchor="center", minwidth=40)
+        self.scrollbar.config(command=self.tree.yview)
+
+        for col, head, width, align in zip(
+            self.COLS, self.HEADS, self.WIDTHS, self.ALIGNS
+        ):
+            self.tree.heading(col, text=head, anchor="center")
+            self.tree.column(col, width=width, anchor=align, minwidth=40)
+
         self.tree.tag_configure("IN", foreground=T.STOCK_OK)
         self.tree.tag_configure("OUT", foreground=T.STOCK_CRIT)
         self.tree.tag_configure("RETURN", foreground=T.PRIMARY)
         self.tree.tag_configure("odd", background=T.ROW_ALT)
         self.tree.tag_configure("even", background=T.ROW_WHITE)
+
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        sb.pack(side=tk.RIGHT, fill=tk.Y)
-        self._items: List[Transaction] = []
-        self._query = ""
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-    def load(self, items: List[Transaction]) -> None:
-        self._items = list(items)
-        self._render()
+    # ------------------------------------------------------------------ public
 
-    def filter(self, query: str) -> None:
-        """Filter visible movements by ID, date, code, product, type or note."""
+    def load(self, items: Iterable[Transaction]) -> int:
+        """جایگزینی کل داده‌ها. تعداد ردیف‌های نمایش‌داده‌شده برگردانده می‌شود."""
+        self._items = tuple(items)
+        return self._render(reset_scroll=True)
+
+    def filter(self, query: str) -> int:
+        """فیلتر ردیف‌ها بر اساس شناسه، تاریخ، کد، نام، نوع یا توضیح."""
         self._query = query.strip().casefold()
-        self._render()
+        return self._render(reset_scroll=True)
 
-    def _render(self) -> None:
+    def clear(self) -> None:
+        """خالی‌کردن کامل جدول و حافظهٔ نهان داده."""
+        self._items = ()
+        self._query = ""
         self.tree.delete(*self.tree.get_children())
-        items = self._items
-        if self._query:
-            items = [t for t in items if self._query in " ".join((
-                str(t.id), str(t.date), str(t.user_code or t.code), t.name, t.type_fa(),
-                f"{t.qty:g}", t.unit, t.note,
-            )).casefold()]
-        for i, t in enumerate(items):
-            row_tag = "odd" if i % 2 else "even"
+
+    def selected_id(self) -> Optional[int]:
+        """شناسهٔ تراکنش انتخاب‌شده یا `None`."""
+        selection = self.tree.selection()
+        if not selection:
+            return None
+        try:
+            return int(self.tree.item(selection[0], "values")[0])
+        except (IndexError, ValueError, TypeError):
+            return None
+
+    @property
+    def total_count(self) -> int:
+        """تعداد کل تراکنش‌ها (بدون فیلتر)."""
+        return len(self._items)
+
+    @property
+    def visible_count(self) -> int:
+        """تعداد ردیف‌های در حال نمایش."""
+        return len(self.tree.get_children())
+
+    # ----------------------------------------------------------------- internal
+
+    def _render(self, *, reset_scroll: bool = False) -> int:
+        self.tree.delete(*self.tree.get_children())
+        for index, tx in enumerate(self._iter_visible()):
             self.tree.insert(
                 "",
                 tk.END,
-                values=(t.id, t.date, t.user_code or t.code, t.name, t.type_fa(), f"{t.qty:g}", t.unit, t.note),
-                tags=(t.type, row_tag),
+                values=self._row_values(tx),
+                tags=self._row_tags(tx, index),
             )
+        if reset_scroll:
+            self.tree.yview_moveto(0.0)
+        return self.visible_count
 
-    def selected_id(self) -> Optional[int]:
-        sel = self.tree.selection()
-        if not sel:
-            return None
-        try:
-            return int(self.tree.item(sel[0], "values")[0])
-        except (IndexError, ValueError, TypeError):
-            return None
+    def _iter_visible(self) -> Iterable[Transaction]:
+        if not self._query:
+            yield from self._items
+            return
+        needle = self._query
+        for tx in self._items:
+            if needle in self._search_blob(tx):
+                yield tx
+
+    def _search_blob(self, tx: Transaction) -> str:
+        return " ".join((
+            str(tx.id),
+            str(tx.date),
+            str(tx.user_code or tx.code or ""),
+            tx.name or "",
+            tx.type_fa(),
+            f"{tx.qty:g}",
+            tx.unit or "",
+            tx.note or "",
+        )).casefold()
+
+    @staticmethod
+    def _row_values(tx: Transaction) -> tuple:
+        return (
+            tx.id,
+            tx.date,
+            tx.user_code or tx.code or "",
+            tx.name or "",
+            tx.type_fa(),
+            f"{tx.qty:g}",
+            tx.unit or "",
+            tx.note or "",
+        )
+
+    @staticmethod
+    def _row_tags(tx: Transaction, index: int) -> Tuple[str, ...]:
+        # ترتیب مهم است: در ttk.Treeview هر صفت با «آخرین تگِ تعریف‌کننده» بازنویسی می‌شود.
+        # IN/OUT/RETURN فقط foreground می‌دهند و odd/even فقط background؛ بنابراین
+        # در حال حاضر تداخلی ندارند — اما اگر روزی به تگ‌های zebra هم foreground دادید،
+        # باید ترتیب را برعکس کنید تا رنگ نوع پنهان نشود.
+        zebra = "odd" if index % 2 else "even"
+        return (tx.type, zebra)
