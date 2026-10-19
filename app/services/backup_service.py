@@ -91,15 +91,33 @@ class BackupService:
         )
         os.close(fd)
         temp_path = Path(temp_name)
+        displaced_path: Optional[Path] = None
         try:
             shutil.copy2(backup_file, temp_path)
             self._validate_sqlite(temp_path)
-            os.replace(temp_path, self.db_path)
+
+            # On Windows, replacing an existing SQLite file can fail even after
+            # connections are closed. Move it aside first, then install the
+            # validated file. Keep the safety copy independent for recovery.
+            if self.db_path.exists():
+                displaced_path = self.db_path.with_name(
+                    f".{self.db_path.name}.old_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+                )
+                os.replace(self.db_path, displaced_path)
+            try:
+                os.replace(temp_path, self.db_path)
+            except Exception:
+                if displaced_path and displaced_path.exists() and not self.db_path.exists():
+                    os.replace(displaced_path, self.db_path)
+                raise
+            if displaced_path and displaced_path.exists():
+                displaced_path.unlink()
             return self.db_path
         except Exception:
             temp_path.unlink(missing_ok=True)
-            # os.replace is atomic; if it failed, the original DB remains untouched.
-            # If a post-replace error is ever raised, restore the safety copy.
-            if safety and safety.exists() and not self.db_path.exists():
+            # If installation failed after moving the original, restore it.
+            if displaced_path and displaced_path.exists() and not self.db_path.exists():
+                os.replace(displaced_path, self.db_path)
+            elif safety and safety.exists() and not self.db_path.exists():
                 shutil.copy2(safety, self.db_path)
             raise
