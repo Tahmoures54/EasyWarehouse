@@ -36,7 +36,7 @@ def create_product_template(path: str | Path) -> Path:
         cell.alignment = Alignment(horizontal="center", vertical="center")
     for col, width in {"A": 30, "B": 16, "C": 20, "D": 18, "E": 20}.items():
         sheet.column_dimensions[col].width = width
-    sheet.append(["", DEFAULT_UNIT, 0, DEFAULT_CATEGORY, ""])
+    sheet.append([None, None, None, None, None])
     sheet["A2"].comment = Comment(
         "این ردیف نمونه نیست؛ اطلاعات کالای واقعی را در آن وارد کنید یا ردیف را خالی بگذارید.",
         "EasyWarehouse",
