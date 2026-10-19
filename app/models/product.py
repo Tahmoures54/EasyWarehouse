@@ -17,10 +17,11 @@ class Product:
     stock: float = 0.0
     category: str = "عمومی"
     shelf: str = ""
+    user_code: str = ""
 
     def label(self) -> str:
-        """فرمت نمایش در Combobox: کد - نام."""
-        return f"{self.code} - {self.name}"
+        """فرمت نمایشی بر اساس کد انتخابی کاربر."""
+        return f"{self.user_code or self.code} - {self.name}"
 
     def is_critical(self) -> bool:
         return self.stock < 0
