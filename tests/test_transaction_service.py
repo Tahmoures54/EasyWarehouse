@@ -118,13 +118,8 @@ def test_overdraw_is_blocked_by_default(services):
 def test_invalid_nonempty_dates_rejected(services, bad_date):
     ps, ts = services
     p = ps.add("تاریخ نامعتبر")
-    if bad_date == "":
-        # An omitted date means today; an explicitly blank string has the same documented behavior.
-        tx, _ = ts.add(p.code, "IN", 1, date_str=bad_date)
-        assert len(tx.date) == 10
-    else:
-        with pytest.raises(ValueError, match="تاریخ نامعتبر"):
-            ts.add(p.code, "IN", 1, date_str=bad_date)
+    with pytest.raises(ValueError, match="تاریخ"):
+        ts.add(p.code, "IN", 1, date_str=bad_date)
 
 
 def test_delete_transaction_recalculates_stock(services):
