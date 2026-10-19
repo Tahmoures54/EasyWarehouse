@@ -51,3 +51,23 @@ def test_restore_missing_file_keeps_current_database(tmp_path):
     with pytest.raises(FileNotFoundError):
         BackupService(current).restore(tmp_path / "missing.db")
     assert ProductService(DB(path=current)).get("P001").name == "داده سالم"
+
+
+def test_restore_replace_failure_preserves_current_database(tmp_path, monkeypatch):
+    import app.services.backup_service as backup_module
+
+    current = tmp_path / "anbar.db"
+    make_db(current, "داده فعلی")
+    service = BackupService(current)
+    saved = service.backup(tmp_path / "backups")
+
+    original_replace = backup_module.os.replace
+    def fail_replace(source, destination):
+        raise OSError("simulated replace failure")
+    monkeypatch.setattr(backup_module.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="simulated"):
+        service.restore(saved)
+
+    monkeypatch.setattr(backup_module.os, "replace", original_replace)
+    assert ProductService(DB(path=current)).get("P001").name == "داده فعلی"
