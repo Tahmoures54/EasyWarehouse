@@ -138,8 +138,8 @@ class MainWindow(tk.Tk):
         form_wrap = ttk.Frame(self, padding=(16, 2, 16, 8))
         form_wrap.pack(fill=tk.X)
         ttk.Label(form_wrap, text="ثبت گردش کالا", style="Section.TLabel").pack(anchor="w", pady=(0, 5))
-        self.form = TransactionForm(self, self.ps, self.ts, on_ok=self.refresh)
-        self.form.pack(in_=form_wrap, fill=tk.X)
+        self.form = TransactionForm(form_wrap, self.ps, self.ts, on_ok=self.refresh)
+        self.form.pack(fill=tk.X)
 
         # ناحیه کاری
         mid = ttk.Frame(self, padding=(16, 2, 16, 12))
@@ -195,7 +195,7 @@ class MainWindow(tk.Tk):
     def _metric_card(self, parent, column: int, title: str, value: str, hint: str, accent: str):
         card = ttk.Frame(parent, style="Metric.TFrame", padding=(14, 10))
         card.grid(row=0, column=column, sticky="nsew", padx=5, pady=2)
-        ttk.Frame(card, style="MetricAccent.TFrame").pack(fill=tk.X, ipady=2, pady=(0, 7))
+        tk.Frame(card, bg=accent, height=4).pack(fill=tk.X, pady=(0, 7))
         # رنگ نوار بالایی با استایل مستقل قابل تنظیم است؛ مقدار شاخص درشت و واضح می‌ماند.
         ttk.Label(card, text=title, style="MetricLabel.TLabel").pack(anchor="w")
         value_label = ttk.Label(card, text=value, style="MetricValue.TLabel")
