@@ -61,7 +61,7 @@ class ProductForm(tk.Toplevel):
         ttk.Label(f, text="واحد:").grid(row=2, column=0, sticky="e", pady=5, padx=4)
         self.unit_var = tk.StringVar(value="عدد")
         ttk.Combobox(f, textvariable=self.unit_var, values=list(UNITS), width=28).grid(
-            row=1, column=1, sticky="w", pady=5
+            row=2, column=1, sticky="w", pady=5
         )
 
         ttk.Label(f, text="حداقل موجودی:").grid(row=3, column=0, sticky="e", pady=5, padx=4)
