@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import math
+from datetime import date
 from typing import List, Optional, Tuple
 
+from app.config import ALLOW_NEGATIVE_STOCK
 from app.database.db_manager import DB
 from app.models.transaction import Transaction
 from app.services.product_service import ProductService
@@ -24,13 +27,27 @@ def parse_positive_qty(raw: str) -> float:
         qty = float(text)
     except ValueError as exc:
         raise ValueError("مقدار عددی نامعتبر است.") from exc
-    if qty <= 0:
-        raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+    if not math.isfinite(qty) or qty <= 0:
+        raise ValueError("مقدار باید عددی متناهی و بزرگ‌تر از صفر باشد.")
     return qty
 
 
+def validate_transaction_date(value: Optional[str]) -> str:
+    """تاریخ را فقط با قالب واقعی ISO YYYY-MM-DD می‌پذیرد."""
+    text = (value or "").strip()
+    if not text:
+        return Transaction.today()
+    try:
+        parsed = date.fromisoformat(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("تاریخ نامعتبر است؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است.") from exc
+    if parsed.isoformat() != text:
+        raise ValueError("تاریخ نامعتبر است؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است.")
+    return text
+
+
 class TransactionService:
-    """ثبت ورود / خروج / عودت با هشدار موجودی."""
+    """ثبت ورود / خروج / عودت با سیاست روشن کنترل موجودی."""
 
     def __init__(self, db: Optional[DB] = None) -> None:
         self.db = db or DB()
@@ -43,60 +60,66 @@ class TransactionService:
         qty: float,
         date_str: Optional[str] = None,
         note: str = "",
-        allow_overdraw: bool = True,
+        allow_overdraw: Optional[bool] = None,
     ) -> Tuple[Transaction, Optional[str]]:
         type_ = (type_ or "").upper()
         if type_ not in ("IN", "OUT", "RETURN"):
             raise ValueError("نوع تراکنش باید ورود، خروج یا عودت باشد.")
-        qty = float(qty)
-        if qty <= 0:
-            raise ValueError("مقدار باید بزرگ‌تر از صفر باشد.")
+        try:
+            qty = float(qty)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("مقدار باید عددی معتبر باشد.") from exc
+        if not math.isfinite(qty) or qty <= 0:
+            raise ValueError("مقدار باید عددی متناهی و بزرگ‌تر از صفر باشد.")
+        code = (code or "").strip()
+        if not code:
+            raise ValueError("کد کالا را انتخاب کنید.")
+        date_str = validate_transaction_date(date_str)
+        if allow_overdraw is None:
+            allow_overdraw = ALLOW_NEGATIVE_STOCK
+        if not isinstance(allow_overdraw, bool):
+            raise ValueError("سیاست موجودی منفی باید روشن یا خاموش باشد.")
 
         product = self.products.get(code)
         if not product:
             raise ValueError(f"کالایی با کد {code} یافت نشد.")
 
-        date_str = date_str or Transaction.today()
         warning: Optional[str] = None
-
         if type_ == "OUT":
             after = product.stock - qty
             if after < 0:
                 warning = (
-                    f"⚠ موجودی منفی می‌شود!\n"
-                    f"موجودی فعلی: {product.stock:g} {product.unit}\n"
-                    f"پس از خروج: {after:g} {product.unit}"
+                    f"موجودی کافی نیست. موجودی فعلی: {product.stock:g} {product.unit}؛ "
+                    f"مقدار خروج: {qty:g} {product.unit}؛ کسری: {-after:g} {product.unit}."
                 )
                 if not allow_overdraw:
-                    raise ValueError(warning)
+                    raise ValueError(warning + "\nثبت خروج انجام نشد.")
             elif after < product.min_stock:
                 warning = (
-                    f"⚠ موجودی به زیر حداقل مجاز می‌رسد.\n"
-                    f"فعلی: {product.stock:g} | حداقل: {product.min_stock:g} | بعد: {after:g}"
+                    f"هشدار: موجودی پس از خروج کمتر از حداقل می‌شود. "
+                    f"فعلی: {product.stock:g}؛ حداقل: {product.min_stock:g}؛ بعد: {after:g}."
                 )
 
         tid = self.db.run(
             "INSERT INTO transactions (code, type, qty, date, note) VALUES (?,?,?,?,?)",
-            (code, type_, qty, date_str, note or None),
+            (code, type_, qty, date_str, (note or "").strip() or None),
         )
         tx = Transaction(
-            id=tid,
-            code=code,
-            type=type_,
-            qty=qty,
-            date=date_str,
-            note=note or "",
-            name=product.name,
-            unit=product.unit,
+            id=tid, code=code, type=type_, qty=qty, date=date_str,
+            note=(note or "").strip(), name=product.name, unit=product.unit,
         )
         return tx, warning
 
     def delete(self, tx_id: int) -> None:
+        if isinstance(tx_id, bool) or not isinstance(tx_id, int) or tx_id <= 0:
+            raise ValueError("شناسه تراکنش نامعتبر است.")
         n = self.db.run("DELETE FROM transactions WHERE id=?", (tx_id,))
         if n == 0:
             raise ValueError(f"تراکنشی با شناسه {tx_id} یافت نشد.")
 
     def all(self, limit: int = 300) -> List[Transaction]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+            raise ValueError("تعداد تراکنش‌های درخواستی نامعتبر است.")
         rows = self.db.all(
             """
             SELECT t.*, p.name, p.unit
@@ -109,18 +132,12 @@ class TransactionService:
         )
         return [
             Transaction(
-                id=r["id"],
-                code=r["code"],
-                type=r["type"],
-                qty=float(r["qty"]),
-                date=r["date"],
-                note=r["note"] or "",
-                name=r["name"],
-                unit=r["unit"],
+                id=r["id"], code=r["code"], type=r["type"], qty=float(r["qty"]),
+                date=r["date"], note=r["note"] or "", name=r["name"], unit=r["unit"],
             )
             for r in rows
         ]
 
     def get_stock(self, code: str) -> float:
-        p = self.products.get(code)
+        p = self.products.get((code or "").strip())
         return p.stock if p else 0.0
