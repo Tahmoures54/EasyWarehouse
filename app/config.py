@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-تنظیمات مرکزی EasyWarehouse
-مسیر دیتابیس در %APPDATA% روی ویندوز قرار می‌گیرد.
-"""
+"""تنظیمات مرکزی EasyWarehouse."""
 
 from __future__ import annotations
 
@@ -19,22 +16,16 @@ GITHUB_URL = "https://github.com/Tahmoures54/EasyWarehouse"
 APP_GEOMETRY = "1100x700"
 APP_MIN_SIZE = (900, 560)
 
-# انواع تراکنش
-TYPES = {"IN": "ورود", "OUT": "خروج", "RETURN": "عودت"}
-TYPE_LABELS = {
-    "IN": "ورود به انبار",
-    "OUT": "خروج از انبار",
-    "RETURN": "عودت به انبار",
-}
+# سیاست پیش‌فرض انبار واقعی: خروج بیش از موجودی ممنوع است.
+# فقط با تغییر صریح این مقدار به True می‌توان موجودی منفی ثبت کرد.
+ALLOW_NEGATIVE_STOCK = False
 
+TYPES = {"IN": "ورود", "OUT": "خروج", "RETURN": "عودت"}
+TYPE_LABELS = {"IN": "ورود به انبار", "OUT": "خروج از انبار", "RETURN": "عودت به انبار"}
 PRODUCT_CODE_PREFIX = "P"
 PRODUCT_CODE_PADDING = 3
-
 CATEGORIES = ("مصرفی", "تکنیکال", "عمومی")
-UNITS = (
-    "عدد", "جعبه", "بسته", "رول", "کیلو", "گالن",
-    "جفت", "ست", "توپ", "پاکت", "لیتر", "متر", "شل",
-)
+UNITS = ("عدد", "جعبه", "بسته", "رول", "کیلو", "گالن", "جفت", "ست", "توپ", "پاکت", "لیتر", "متر", "شل")
 
 
 def _app_data_dir() -> Path:
@@ -46,17 +37,13 @@ def _app_data_dir() -> Path:
 
 
 def get_db_path() -> Path:
-    """مسیر مطلق فایل دیتابیس."""
     folder = _app_data_dir()
     folder.mkdir(parents=True, exist_ok=True)
     return folder / "anbar.db"
 
 
 def resource_path(*parts: str) -> Path:
-    """
-    مسیر منابع (schema، آیکون و ...).
-    در حالت PyInstaller از sys._MEIPASS استفاده می‌شود.
-    """
+    """مسیر منابع؛ در PyInstaller از sys._MEIPASS استفاده می‌شود."""
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         base = Path(sys._MEIPASS)  # type: ignore[attr-defined]
     else:
