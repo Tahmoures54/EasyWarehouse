@@ -34,9 +34,11 @@ def parse_positive_qty(raw: str) -> float:
 
 def validate_transaction_date(value: Optional[str]) -> str:
     """تاریخ را فقط با قالب واقعی ISO YYYY-MM-DD می‌پذیرد."""
-    text = (value or "").strip()
-    if not text:
+    if value is None:
         return Transaction.today()
+    text = value.strip()
+    if not text:
+        raise ValueError("تاریخ را وارد کنید؛ قالب صحیح YYYY-MM-DD مانند 2026-10-19 است.")
     try:
         parsed = date.fromisoformat(text)
     except (TypeError, ValueError) as exc:
