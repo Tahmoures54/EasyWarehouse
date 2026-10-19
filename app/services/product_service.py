@@ -28,15 +28,15 @@ class ProductService:
         return normalize_product_text(value)
 
     def next_code(self) -> str:
-        """تولید کد بعدی مثل P001, P002."""
-        row = self.db.one("SELECT code FROM products ORDER BY code DESC LIMIT 1")
-        if not row:
-            return f"{PRODUCT_CODE_PREFIX}{1:0{PRODUCT_CODE_PADDING}d}"
-        try:
-            num = int(str(row["code"]).replace(PRODUCT_CODE_PREFIX, "")) + 1
-        except ValueError:
-            num = 1
-        return f"{PRODUCT_CODE_PREFIX}{num:0{PRODUCT_CODE_PADDING}d}"
+        """Generate a stable internal key independent of user-visible codes."""
+        rows = self.db.all("SELECT code FROM products")
+        numbers = [
+            int(str(row["code"])[len(PRODUCT_CODE_PREFIX):])
+            for row in rows
+            if str(row["code"]).startswith(PRODUCT_CODE_PREFIX)
+            and str(row["code"])[len(PRODUCT_CODE_PREFIX):].isdigit()
+        ]
+        return f"{PRODUCT_CODE_PREFIX}{max(numbers, default=0) + 1:0{PRODUCT_CODE_PADDING}d}"
 
     def duplicate_warnings(self, name: str, user_code: str, exclude_code: Optional[str] = None) -> List[str]:
         """Return non-blocking warnings for duplicate user code and normalized name."""
