@@ -27,7 +27,7 @@
 ```bat
 git clone https://github.com/Tahmoures54/EasyWarehouse.git
 cd EasyWarehouse
-scripts\\build_windows.bat
+scripts\build_windows.bat
 ```
 
 خروجی: `dist\\EasyWarehouse.exe`
@@ -55,9 +55,9 @@ EasyWarehouse/
 │   ├── database/
 │   ├── models/
 │   ├── services/
-│   └── ui/
+│   └── ui/          # theme, help, about, forms, widgets
 ├── assets/
-├── scripts/
+├── scripts/         # seed, build
 ├── tests/
 ├── LICENSE
 ├── CHANGELOG.md
@@ -70,6 +70,14 @@ EasyWarehouse/
 2. نوع را مشخص کنید (ورود / خروج / عودت).
 3. تعداد را وارد کنید.
 4. ثبت را بزنید.
+
+## عیب‌یابی
+
+| مشکل | راه حل |
+|------|--------|
+| برنامه باز نمی‌شود | از Release رسمی دانلود کنید؛ آنتی‌ویروس را موقتاً بررسی کنید |
+| دیتابیس قفل است | نسخه دیگری از برنامه را ببندید |
+| انتقال داده | پرونده → پشتیبان‌گیری / بازیابی |
 
 ## لایسنس
 
