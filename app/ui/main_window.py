@@ -48,6 +48,7 @@ class MainWindow(tk.Tk):
         self._build_menu()
         self._build_ui()
         self.bind("<F1>", lambda e: self._help())
+        self.bind("<Control-f>", self._focus_transaction_search)
         self.refresh()
 
     def _set_icon(self) -> None:
@@ -119,6 +120,16 @@ class MainWindow(tk.Tk):
 
         left = ttk.LabelFrame(mid, text=" تراکنش‌ها ", style="Card.TLabelframe", padding=8)
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        searchbar = ttk.Frame(left)
+        searchbar.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(searchbar, text="جست‌وجوی تراکنش:").pack(side=tk.LEFT, padx=(0, 6))
+        self.tx_search_var = tk.StringVar()
+        search_entry = ttk.Entry(searchbar, textvariable=self.tx_search_var)
+        self.transaction_search_entry = search_entry
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        search_entry.bind("<KeyRelease>", lambda _event: self.table.filter(self.tx_search_var.get()))
+        search_entry.bind("<Escape>", self._clear_transaction_search)
+        ttk.Button(searchbar, text="پاک‌کردن", style="Secondary.TButton", command=self._clear_transaction_search).pack(side=tk.LEFT, padx=(6, 0))
         self.table = TxTable(left)
         self.table.pack(fill=tk.BOTH, expand=True)
         tb = ttk.Frame(left)
@@ -144,6 +155,16 @@ class MainWindow(tk.Tk):
         ttk.Label(status, text=f"DB: {get_db_path()}", style="Status.TLabel").pack(
             side=tk.RIGHT, padx=10, pady=4
         )
+
+    def _focus_transaction_search(self, _event=None):
+        self.transaction_search_entry.focus_set()
+        self.transaction_search_entry.selection_range(0, tk.END)
+        return "break"
+
+    def _clear_transaction_search(self, _event=None):
+        self.tx_search_var.set("")
+        self.table.filter("")
+        return "break"
 
     def _filter_cat(self) -> Optional[str]:
         v = self.cat_filter.get()
@@ -184,11 +205,20 @@ class MainWindow(tk.Tk):
         ]:
             tree.heading(c, text=h)
             tree.column(c, width=w, anchor="center")
-        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=(4, 10))
+        searchbar = ttk.Frame(win)
+        searchbar.pack(fill=tk.X, padx=10, pady=(10, 0))
+        ttk.Label(searchbar, text="جست‌وجوی کالا (نام یا کد):").pack(side=tk.LEFT, padx=(0, 6))
+        product_search_var = tk.StringVar()
+        product_search = ttk.Entry(searchbar, textvariable=product_search_var)
+        product_search.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         def load() -> None:
             tree.delete(*tree.get_children())
+            query = product_search_var.get().strip().casefold()
             for p in self.ps.all():
+                if query and query not in f"{p.code} {p.name} {p.category} {p.shelf or ''}".casefold():
+                    continue
                 tree.insert("", tk.END, values=(
                     p.code, p.name, p.unit, p.category, p.shelf or "—",
                     f"{p.min_stock:g}", f"{p.stock:g}",
@@ -219,6 +249,7 @@ class MainWindow(tk.Tk):
 
         bf = ttk.Frame(win)
         bf.pack(fill=tk.X, padx=10, pady=6)
+        product_search.bind("<KeyRelease>", lambda _event: load())
         ttk.Button(bf, text="جدید", style="Primary.TButton",
                    command=lambda: ProductForm(win, self.ps, on_save=lambda: (load(), self.refresh()))).pack(side=tk.LEFT, padx=3)
         ttk.Button(bf, text="ویرایش", style="Secondary.TButton", command=edit).pack(side=tk.LEFT, padx=3)

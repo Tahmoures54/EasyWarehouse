@@ -40,9 +40,26 @@ class TxTable(ttk.Frame):
         self.tree.tag_configure("even", background=T.ROW_WHITE)
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
+        self._items: List[Transaction] = []
+        self._query = ""
 
     def load(self, items: List[Transaction]) -> None:
+        self._items = list(items)
+        self._render()
+
+    def filter(self, query: str) -> None:
+        """Filter visible movements by ID, date, code, product, type or note."""
+        self._query = query.strip().casefold()
+        self._render()
+
+    def _render(self) -> None:
         self.tree.delete(*self.tree.get_children())
+        items = self._items
+        if self._query:
+            items = [t for t in items if self._query in " ".join((
+                str(t.id), str(t.date), str(t.code), t.name, t.type_fa(),
+                f"{t.qty:g}", t.unit, t.note,
+            )).casefold()]
         for i, t in enumerate(items):
             row_tag = "odd" if i % 2 else "even"
             self.tree.insert(

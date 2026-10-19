@@ -44,13 +44,17 @@ class TransactionForm(ttk.LabelFrame):
         self.info.grid(row=2, column=0, columnspan=2, sticky="ew", padx=4, pady=2)
         ttk.Label(self, text="مقدار:").grid(row=3, column=0, sticky="e", padx=4, pady=4)
         self.qty_var = tk.StringVar()
-        ttk.Entry(self, textvariable=self.qty_var, width=14).grid(row=3, column=1, sticky="w", pady=4)
+        qty_entry = ttk.Entry(self, textvariable=self.qty_var, width=14)
+        qty_entry.grid(row=3, column=1, sticky="w", pady=4)
+        qty_entry.bind("<Return>", lambda _event: self._submit())
         ttk.Label(self, text="تاریخ (YYYY-MM-DD):").grid(row=4, column=0, sticky="e", padx=4, pady=4)
         self.date_var = tk.StringVar(value=date.today().isoformat())
         ttk.Entry(self, textvariable=self.date_var, width=14).grid(row=4, column=1, sticky="w", pady=4)
         ttk.Label(self, text="توضیح:").grid(row=5, column=0, sticky="e", padx=4, pady=4)
         self.note_var = tk.StringVar()
-        ttk.Entry(self, textvariable=self.note_var, width=42).grid(row=5, column=1, sticky="w", pady=4)
+        note_entry = ttk.Entry(self, textvariable=self.note_var, width=42)
+        note_entry.grid(row=5, column=1, sticky="w", pady=4)
+        note_entry.bind("<Return>", lambda _event: self._submit())
         bf = ttk.Frame(self)
         bf.grid(row=6, column=0, columnspan=2, pady=10)
         ttk.Button(bf, text="ثبت تراکنش", style="Primary.TButton", command=self._submit, width=14).pack(side=tk.LEFT, padx=4)
@@ -84,14 +88,19 @@ class TransactionForm(ttk.LabelFrame):
         if warn:
             messagebox.showwarning("هشدار موجودی", warn)
         messagebox.showinfo("ثبت شد", f"{tx.type_fa()} به مقدار {tx.qty:g} {tx.unit} ثبت شد.")
-        self._clear()
+        self._clear(preserve_type=True)
+        self.combo.focus_set()
         if self.on_ok:
             self.on_ok()
 
-    def _clear(self) -> None:
+    def _clear(self, preserve_type: bool = False) -> None:
+        previous_type = self.type_var.get()
         self.prod_var.set("")
         self.qty_var.set("")
         self.note_var.set("")
         self.date_var.set(date.today().isoformat())
-        self.type_var.set("IN")
+        if not preserve_type:
+            self.type_var.set("IN")
+        else:
+            self.type_var.set(previous_type)
         self.info.config(text="موجودی: —  |  واحد: —  |  حداقل: —  |  قفسه: —", fg=T.TEXT_MUTED)
