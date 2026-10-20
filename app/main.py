@@ -62,8 +62,13 @@ def _setup_logging(verbose: bool = False) -> Optional[Path]:
         log_path = None
         handlers = []
 
-    if sys.stderr.isatty() or verbose:
-        handlers.append(logging.StreamHandler())
+    # PyInstaller --windowed / --noconsole may set sys.stderr to None.
+    # Only create a console handler when a usable stderr stream exists.
+    stderr = getattr(sys, "stderr", None)
+    isatty = getattr(stderr, "isatty", None) if stderr is not None else None
+    has_tty = bool(callable(isatty) and isatty())
+    if stderr is not None and (has_tty or verbose):
+        handlers.append(logging.StreamHandler(stderr))
 
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
