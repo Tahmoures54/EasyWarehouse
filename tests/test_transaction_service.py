@@ -277,3 +277,13 @@ def test_void_document_requires_reason_and_keeps_stock_unchanged(services):
     with pytest.raises(ValueError, match="علت"):
         ts.void_document(document_no, "admin", " ")
     assert ps.get(product.code).stock == 2
+
+
+def test_search_can_find_historical_transactions_by_note(services):
+    ps, ts = services
+    product = ps.add("کالای سابقه")
+    ts.add(product.code, "IN", 1, "2024-01-01", "ARCHIVE-SEARCH-MARKER")
+    results = ts.search(query="ARCHIVE-SEARCH-MARKER", limit=5000)
+    assert len(results) == 1
+    assert results[0].date == "2024-01-01"
+    assert results[0].note == "ARCHIVE-SEARCH-MARKER"
