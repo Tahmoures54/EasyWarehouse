@@ -48,7 +48,7 @@ class DB:
     برای گزارش‌های سنگین، یک کوئری کافی است (نه حلقه روی رکوردها).
     """
 
-    SCHEMA_VERSION = 3
+    SCHEMA_VERSION = 4
 
     def __init__(self, path: Optional[Union[str, Path]] = None) -> None:
         self.path = self._resolve_path(path)
@@ -163,6 +163,7 @@ class DB:
                 self._apply_schema(conn, schema_file)
                 self._ensure_product_columns(conn)
                 self._ensure_transaction_document_columns(conn)
+                self._ensure_warehouse_documents(conn)
                 self._stamp_version(conn)
                 conn.commit()
         except DatabaseError:
@@ -320,12 +321,58 @@ class DB:
             "UPDATE transactions SET document_no = 'EW-' || printf('%06d', id) "
             "WHERE document_no IS NULL OR trim(document_no) = ''"
         )
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_document_no ON transactions(document_no)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tx_party_name ON transactions(party_name)"
-        )
+        conn.execute("DROP INDEX IF EXISTS idx_tx_document_no")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tx_document_no ON transactions(document_no)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tx_party_name ON transactions(party_name)")
+
+    @staticmethod
+    def _ensure_warehouse_documents(conn: sqlite3.Connection) -> None:
+        """ایجاد سربرگ سند و اتصال امن گردش‌های قدیمی به اسناد تک‌قلمی."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS warehouse_documents (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_no TEXT NOT NULL UNIQUE DEFAULT '',
+                type TEXT NOT NULL CHECK (type IN ('IN','OUT','RETURN')),
+                date TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                party_name TEXT NOT NULL DEFAULT '',
+                delivered_by TEXT NOT NULL DEFAULT '',
+                received_by TEXT NOT NULL DEFAULT '',
+                reference_no TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'POSTED' CHECK (status IN ('POSTED','VOID')),
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(transactions)")}
+        if "document_id" not in columns:
+            conn.execute("ALTER TABLE transactions ADD COLUMN document_id INTEGER")
+        rows = conn.execute(
+            "SELECT id, document_no, type, date, note, party_name, delivered_by, received_by, reference_no "
+            "FROM transactions WHERE document_id IS NULL"
+        ).fetchall()
+        for row in rows:
+            doc_no = (row["document_no"] or "").strip() or f"EW-{int(row['id']):06d}"
+            existing = conn.execute(
+                "SELECT id FROM warehouse_documents WHERE document_no = ?", (doc_no,)
+            ).fetchone()
+            if existing:
+                doc_id = int(existing["id"])
+            else:
+                cur = conn.execute(
+                    """INSERT INTO warehouse_documents
+                       (document_no, type, date, note, party_name, delivered_by, received_by, reference_no)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (doc_no, row["type"], row["date"], row["note"] or "",
+                     row["party_name"] or "", row["delivered_by"] or "",
+                     row["received_by"] or "", row["reference_no"] or ""),
+                )
+                doc_id = int(cur.lastrowid)
+            conn.execute(
+                "UPDATE transactions SET document_id = ?, document_no = ? WHERE id = ?",
+                (doc_id, doc_no, int(row["id"])),
+            )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tx_document_id ON transactions(document_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_doc_date ON warehouse_documents(date DESC)")
 
     def _stamp_version(self, conn: sqlite3.Connection) -> None:
         current = int(conn.execute("PRAGMA user_version").fetchone()[0] or 0)

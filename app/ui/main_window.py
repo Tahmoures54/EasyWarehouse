@@ -21,7 +21,7 @@ from app.config import (
 from app.database.db_manager import DB, DatabaseError
 from app.services.backup_service import BackupService
 from app.services.product_service import ProductService
-from app.services.print_service import print_transaction
+from app.services.print_service import print_document, print_transaction
 from app.services.report_service import ReportService
 from app.services.transaction_service import TransactionService
 from app.ui import theme as T
@@ -338,8 +338,8 @@ class MainWindow(tk.Tk):
         win = tk.Toplevel(self)
         self._transaction_win = win
         win.title("ثبت تراکنش انبار")
-        win.geometry("620x430")
-        win.minsize(580, 390)
+        win.geometry("820x760")
+        win.minsize(700, 650)
         win.configure(bg=T.BG)
         win.transient(self)
         win.protocol("WM_DELETE_WINDOW", self._close_transaction_form)
@@ -1080,11 +1080,12 @@ class MainWindow(tk.Tk):
                     parent=self,
                 )
                 return
-            path = print_transaction(tx, self.current_user.get("display_name", ""))
+            lines = self.ts.document_lines(tid)
+            path = print_document(lines or [tx], self.current_user.get("display_name", ""))
             self.users.log_event(
                 self.current_user["username"],
                 "inventory_voucher_printed",
-                f"چاپ سند EW-{int(tx.id):06d} نوع {tx.type}",
+                f"چاپ سند {tx.document_no or f'EW-{int(tx.id):06d}'} نوع {tx.type} با {len(lines or [tx])} قلم",
             )
             messagebox.showinfo(
                 "سند آماده چاپ است",

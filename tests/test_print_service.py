@@ -3,7 +3,7 @@
 
 from types import SimpleNamespace
 
-from app.services.print_service import build_kardex_html, build_voucher_html
+from app.services.print_service import build_document_html, build_kardex_html, build_voucher_html
 
 
 def _tx(type_="IN", note="تحویل <آزمایشی>"):
@@ -39,6 +39,24 @@ def test_receipt_print_contains_persian_date_and_document_number():
     assert "PO-17" in html
     assert "function(){ window.print(); }" in html
     assert "function(){{" not in html
+
+
+def test_multi_item_document_prints_shared_header_and_all_lines():
+    first = _tx("IN")
+    second = _tx("IN")
+    second.id = 18
+    second.code = "internal-2"
+    second.user_code = "A-18"
+    second.name = "واشر"
+    second.qty = 6
+    html = build_document_html([first, second], "اپراتور")
+    assert "EW-000017" in html
+    assert "توضیحات" in html
+    assert "تحویل‌دهنده" in html
+    assert "پیچ و مهره" in html
+    assert "واشر" in html
+    assert "A-18" in html
+    assert html.count("<tr>") >= 10
 
 
 def test_outgoing_transaction_is_dispatch_voucher():

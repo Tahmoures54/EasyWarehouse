@@ -92,6 +92,73 @@ button {{ border: 0; border-radius: 5px; padding: 10px 16px; cursor: pointer; ba
 </body></html>"""
 
 
+def build_document_html(items, operator: str = "") -> str:
+    """ساخت رسید/حواله چاپی برای تمام اقلام یک سند مشترک."""
+    items = list(items or [])
+    if not items:
+        raise ValueError("برای چاپ، اقلام سند یافت نشد.")
+    first = items[0]
+    labels = {"IN": ("رسید ورود کالا", "رسید انبار"),
+              "OUT": ("حواله خروج کالا", "حواله انبار"),
+              "RETURN": ("رسید عودت کالا", "رسید عودت")}
+    title, doc_label = labels.get(first.type, ("سند گردش کالا", "سند انبار"))
+    try:
+        shown_date = to_jalali(first.date)
+    except (TypeError, ValueError):
+        shown_date = first.date
+    def field(label, value):
+        return f"<tr><th>{_safe(label)}</th><td>{_safe(value or '—')}</td></tr>"
+    metadata = "".join([
+        field("شماره سند", getattr(first, "document_no", "")),
+        field("تاریخ", shown_date),
+        field("طرف حساب / واحد", getattr(first, "party_name", "")),
+        field("تحویل‌دهنده", getattr(first, "delivered_by", "")),
+        field("تحویل‌گیرنده", getattr(first, "received_by", "")),
+        field("شماره مرجع", getattr(first, "reference_no", "")),
+        field("توضیحات", getattr(first, "note", "")),
+        field("ثبت‌کننده", operator),
+    ])
+    line_rows = "\n".join(
+        "<tr>" + "".join(f"<td>{_safe(v)}</td>" for v in (
+            i, getattr(tx, "user_code", "") or tx.code, tx.name or "—",
+            tx.type_fa(), f"{tx.qty:g} {tx.unit or ''}".strip()
+        )) + "</tr>"
+        for i, tx in enumerate(items, 1)
+    )
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{_safe(title)} - {_safe(getattr(first, 'document_no', ''))}</title>
+<style>
+@page {{ size:A4 portrait; margin:14mm; }} body{{font-family:Tahoma,Arial,sans-serif;color:#17212b;font-size:11pt}}
+header{{border-bottom:3px solid #087f8c;padding-bottom:12px;margin-bottom:16px}} h1{{font-size:20pt}}
+table{{width:100%;border-collapse:collapse;margin-top:12px}} th,td{{border:1px solid #cbd5df;padding:8px;text-align:right;vertical-align:top}}
+th{{background:#f1f6f8}} .meta th{{width:27%}} .actions{{margin:12px auto}} button{{padding:9px 15px;background:#087f8c;color:white;border:0;font:inherit;cursor:pointer}}
+.signatures{{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:42px}} .signature{{border-top:1px solid #718096;padding-top:8px;text-align:center}}
+@media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
+<header><div>EasyWarehouse | مدیریت انبار</div><h1>{_safe(title)}</h1><div>{_safe(doc_label)} · شماره سند {_safe(getattr(first, 'document_no', ''))}</div></header>
+<table class="meta"><tbody>{metadata}</tbody></table>
+<h2>اقلام سند</h2><table><thead><tr><th>ردیف</th><th>کد کالا</th><th>نام کالا</th><th>نوع</th><th>مقدار</th></tr></thead><tbody>{line_rows}</tbody></table>
+<section class="signatures"><div class="signature">تحویل‌دهنده<br><br>نام و امضا</div><div class="signature">تحویل‌گیرنده / مسئول انبار<br><br>نام و امضا</div></section>
+<script>window.addEventListener('load',function(){{setTimeout(function(){{window.print()}},350)}});</script></body></html>"""
+
+
+def print_document(items, operator: str = "") -> Path:
+    """ذخیره و بازکردن نسخه چاپی کل سند."""
+    items = list(items or [])
+    html_text = build_document_html(items, operator)
+    folder = get_db_path().parent / "printouts"
+    folder.mkdir(parents=True, exist_ok=True)
+    number = getattr(items[0], "document_no", "") or f"EW-{int(items[0].id):06d}"
+    safe_number = "".join(ch for ch in number if ch.isalnum() or ch in "-_")
+    path = folder / f"{safe_number or 'warehouse-document'}.html"
+    path.write_text(html_text, encoding="utf-8")
+    opened = webbrowser.open(path.resolve().as_uri())
+    if not opened:
+        logger.warning("Document saved but browser did not report successful open: %s", path)
+    return path
+
+
 def print_transaction(tx, operator: str = "") -> Path:
     """ذخیره قالب چاپ در پوشه داده کاربر و بازکردن آن در مرورگر پیش‌فرض."""
     folder = get_db_path().parent / "printouts"
@@ -153,4 +220,4 @@ button{{padding:8px 14px;background:#087f8c;color:white;border:0;font:inherit;cu
 </body></html>"""
 
 
-__all__ = ["build_voucher_html", "build_kardex_html", "print_transaction"]
+__all__ = ["build_voucher_html", "build_document_html", "build_kardex_html", "print_document", "print_transaction"]
