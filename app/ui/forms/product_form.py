@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 class ProductForm(tk.Toplevel):
     """دیالوگ افزودن یا ویرایش کالا."""
 
-    WIDTH = 460
-    HEIGHT = 360
+    WIDTH = 520
+    HEIGHT = 500
+    MIN_WIDTH = 460
+    MIN_HEIGHT = 390
 
     def __init__(
         self,
@@ -53,7 +55,7 @@ class ProductForm(tk.Toplevel):
 
     def _configure_window(self, master: tk.Misc) -> None:
         self.title("ویرایش کالا" if self.product else "کالای جدید")
-        self.resizable(False, False)
+        self.resizable(True, True)
         self.configure(bg=T.BG)
         self.transient(master)
         self._center_on(master)
@@ -67,13 +69,25 @@ class ProductForm(tk.Toplevel):
         except tk.TclError:
             mx = my = mw = mh = 0
 
+        screen_w = max(self.winfo_screenwidth(), 1)
+        screen_h = max(self.winfo_screenheight(), 1)
+        available_w = max(screen_w - 24, 1)
+        available_h = max(screen_h - 80, 1)
+        min_w = min(self.MIN_WIDTH, available_w)
+        min_h = min(self.MIN_HEIGHT, available_h)
+        self.minsize(min_w, min_h)
+        width = max(min(self.WIDTH, available_w), min_w)
+        height = max(min(self.HEIGHT, available_h), min_h)
+
         if mw <= 1 or mh <= 1:  # والد هنوز نگاشت نشده — مرکز صفحه
-            x = (self.winfo_screenwidth() - self.WIDTH) // 2
-            y = (self.winfo_screenheight() - self.HEIGHT) // 2
+            x = (screen_w - width) // 2
+            y = (screen_h - height) // 2
         else:
-            x = mx + (mw - self.WIDTH) // 2
-            y = my + (mh - self.HEIGHT) // 2
-        self.geometry(f"{self.WIDTH}x{self.HEIGHT}+{max(x, 0)}+{max(y, 0)}")
+            x = mx + (mw - width) // 2
+            y = my + (mh - height) // 2
+            x = min(max(x, 0), max(screen_w - width, 0))
+            y = min(max(y, 0), max(screen_h - height, 0))
+        self.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
 
     def _bind_shortcuts(self) -> None:
         self.bind("<Escape>", lambda _e: self.destroy())
@@ -81,8 +95,14 @@ class ProductForm(tk.Toplevel):
     # ----------------------------------------------------------------- layout
 
     def _build_form(self) -> None:
+        # نوار عملیات مستقل از محتوای فرم است تا با تغییر اندازه پنجره
+        # یا مقیاس‌بندی ویندوز، دکمه‌ها پایین پنجره قابل مشاهده بمانند.
+        buttons = ttk.Frame(self, padding=(16, 10))
+        buttons.pack(side=tk.BOTTOM, fill=tk.X)
+        ttk.Separator(self, orient="horizontal").pack(side=tk.BOTTOM, fill=tk.X)
+
         frame = ttk.Frame(self, padding=16)
-        frame.pack(fill=tk.BOTH, expand=True)
+        frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         frame.columnconfigure(1, weight=1)
 
         self._add_entry(frame, 0, "کد کالا:", self.user_code_var)
@@ -106,14 +126,12 @@ class ProductForm(tk.Toplevel):
 
         self._add_entry(frame, 5, "قفسه:", self.shelf_var)
 
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=6, column=0, columnspan=2, pady=16)
         ttk.Button(
             buttons, text="ذخیره", style="Primary.TButton", command=self._save, width=12
-        ).pack(side=tk.LEFT, padx=6)
+        ).pack(side=tk.RIGHT, padx=(6, 0))
         ttk.Button(
             buttons, text="انصراف", style="Secondary.TButton", command=self.destroy, width=10
-        ).pack(side=tk.LEFT, padx=6)
+        ).pack(side=tk.RIGHT, padx=6)
 
     def _add_label(self, parent: ttk.Frame, row: int, text: str) -> ttk.Label:
         label = ttk.Label(parent, text=text)
