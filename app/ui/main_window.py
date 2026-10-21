@@ -105,7 +105,6 @@ class MainWindow(tk.Tk):
         self.ts = TransactionService(self.db)
         self.backup = BackupService()
         self.reports = ReportService(self.db)
-        self._seed_defaults_if_needed()
 
     def _seed_defaults_if_needed(self) -> None:
         """درج کالاهای پیش‌فرض در اولین اجرا (یا پس از بازیابی خالی).
