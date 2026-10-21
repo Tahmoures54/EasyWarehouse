@@ -25,9 +25,9 @@ class ProductForm(tk.Toplevel):
     """پنجرهٔ مستقل و بخش‌بندی‌شده برای ثبت یا ویرایش مشخصات کالا."""
 
     PREFERRED_WIDTH = 760
-    PREFERRED_HEIGHT = 650
+    PREFERRED_HEIGHT = 820
     MIN_WIDTH = 620
-    MIN_HEIGHT = 540
+    MIN_HEIGHT = 680
     STATUS_CLEAR_MS = 4500
 
     def __init__(
@@ -72,7 +72,10 @@ class ProductForm(tk.Toplevel):
     def _fit_to_content(self, master: tk.Misc) -> None:
         self.update_idletasks()
         sw, sh = max(self.winfo_screenwidth(), 1), max(self.winfo_screenheight(), 1)
-        max_w, max_h = max(sw - 64, self.MIN_WIDTH), max(sh - 100, self.MIN_HEIGHT)
+        # Use a taller default so the footer buttons remain visible, while still
+        # keeping the window inside the usable screen area on smaller displays.
+        max_w = max(sw - 64, 420)
+        max_h = max(sh - 80, 420)
         w = min(max(self.winfo_reqwidth(), self.PREFERRED_WIDTH), max_w)
         h = min(max(self.winfo_reqheight(), self.PREFERRED_HEIGHT), max_h)
 
