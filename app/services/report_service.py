@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -137,6 +138,65 @@ class ReportService:
                 "last_movement": row["last_movement"] or "",
             })
         return result
+
+
+    def stale_inventory_rows(self, days: int = 90, as_of: Optional[str] = None) -> List[Dict[str, Any]]:
+        """کالاهای دارای موجودی مثبت که در بازه تعیین‌شده گردش نداشته‌اند."""
+        try:
+            threshold = int(days)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("تعداد روز باید عدد صحیح باشد.") from exc
+        if threshold < 1 or threshold > 36500:
+            raise ValueError("تعداد روز باید بین ۱ و ۳۶۵۰۰ باشد.")
+        try:
+            reference = date.fromisoformat(as_of) if as_of else date.today()
+        except ValueError as exc:
+            raise ValueError("تاریخ مبنا باید با قالب YYYY-MM-DD باشد.") from exc
+        result = []
+        for row in self.inventory_rows():
+            stock = float(row["stock"])
+            if stock <= 0:
+                continue
+            last = row["last_movement"]
+            if last:
+                try:
+                    movement_date = date.fromisoformat(last)
+                except ValueError:
+                    logger.warning("Ignoring invalid last movement date: %r", last)
+                    continue
+                age = (reference - movement_date).days
+                if age < threshold:
+                    continue
+            else:
+                age = None
+            result.append({
+                **row,
+                "days_since_movement": age if age is not None else "بدون گردش",
+            })
+        return result
+
+    def export_stale_inventory_csv(self, path: str | Path, days: int = 90, as_of: Optional[str] = None) -> Path:
+        return self.export_csv(
+            path,
+            self.stale_inventory_rows(days=days, as_of=as_of),
+            fieldnames=_INVENTORY_FIELDS + ("days_since_movement",),
+        )
+
+    def inventory_count_template_rows(self) -> List[Dict[str, Any]]:
+        """برگه شمارش فیزیکی؛ تهیه فایل به‌تنهایی هیچ موجودی را تغییر نمی‌دهد."""
+        return [{
+            "code": row["code"], "name": row["name"], "unit": row["unit"],
+            "category": row["category"], "shelf": row["shelf"],
+            "system_stock": row["stock"], "counted_stock": "",
+            "variance": "", "notes": "",
+        } for row in self.inventory_rows()]
+
+    def export_inventory_count_template_csv(self, path: str | Path) -> Path:
+        return self.export_csv(
+            path,
+            self.inventory_count_template_rows(),
+            fieldnames=("code", "name", "unit", "category", "shelf", "system_stock", "counted_stock", "variance", "notes"),
+        )
 
     # ---------------------------------------------------------- transactions
 
