@@ -496,7 +496,7 @@ class MainWindow(tk.Tk):
     @staticmethod
     def _status_background() -> str:
         """رنگ پس‌زمینه نوار وضعیت را از تم فعال می‌گیرد."""
-        return getattr(T, "BG", "#F3F6F8")
+        return getattr(T, "STATUS_BG", getattr(T, "BG", "#F3F6F8"))
 
     def _animate_activity_led(self) -> None:
         """چراغ ظریف چشمک‌زن کنار مسیر دیتابیس."""
