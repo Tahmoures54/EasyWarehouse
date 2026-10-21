@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS transactions (
           CHECK (length(date) = 10
                  AND date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     note  TEXT DEFAULT '',
+    document_no TEXT NOT NULL DEFAULT '',
+    party_name TEXT NOT NULL DEFAULT '',
+    delivered_by TEXT NOT NULL DEFAULT '',
+    received_by TEXT NOT NULL DEFAULT '',
+    reference_no TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (code) REFERENCES products(code)
         ON DELETE RESTRICT
         ON UPDATE CASCADE
@@ -56,6 +61,8 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_tx_code      ON transactions(code);
 CREATE INDEX IF NOT EXISTS idx_tx_date      ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_tx_code_date ON transactions(code, date DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_document_no ON transactions(document_no);
+CREATE INDEX IF NOT EXISTS idx_tx_party_name ON transactions(party_name);
 
 -- محصولات: جست‌وجوی نام (لیست کالاها)، تشخیص تکراری user_code، فیلتر دسته
 CREATE INDEX IF NOT EXISTS idx_prod_name      ON products(name);
