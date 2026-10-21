@@ -34,10 +34,15 @@ class StockAdjustmentService:
                     username TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     transaction_id INTEGER,
+                    document_id INTEGER,
                     FOREIGN KEY(product_code) REFERENCES products(code) ON DELETE RESTRICT,
-                    FOREIGN KEY(transaction_id) REFERENCES transactions(id) ON DELETE RESTRICT
+                    FOREIGN KEY(transaction_id) REFERENCES transactions(id) ON DELETE RESTRICT,
+                    FOREIGN KEY(document_id) REFERENCES warehouse_documents(id) ON DELETE RESTRICT
                 )
             """)
+            adjustment_columns = {row[1] for row in conn.execute("PRAGMA table_info(stock_adjustments)")}
+            if "document_id" not in adjustment_columns:
+                conn.execute("ALTER TABLE stock_adjustments ADD COLUMN document_id INTEGER")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_adjustment_date ON stock_adjustments(created_at DESC)")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS audit_log (
@@ -103,23 +108,41 @@ class StockAdjustmentService:
                 )
             variance = counted - current
             tx_id = None
+            document_id = None
+            document_no = ""
             if abs(variance) > _EPSILON:
                 tx_type = "IN" if variance > 0 else "OUT"
+                header = conn.execute(
+                    """INSERT INTO warehouse_documents
+                       (document_no, type, date, note, party_name, reference_no)
+                       VALUES ('', ?, ?, ?, ?, ?)""",
+                    (tx_type, now[:10], f"تعدیل موجودی | علت: {why}", actor, ref),
+                )
+                document_id = int(header.lastrowid)
+                document_no = f"EW-{document_id:06d}"
+                conn.execute(
+                    "UPDATE warehouse_documents SET document_no=? WHERE id=?",
+                    (document_no, document_id),
+                )
                 cursor = conn.execute(
-                    "INSERT INTO transactions(code, type, qty, date, note) VALUES (?, ?, ?, ?, ?)",
-                    (code, tx_type, abs(variance), now[:10], f"تعدیل شمارش {ref} | علت: {why}"),
+                    """INSERT INTO transactions
+                       (code, type, qty, date, note, document_no, party_name,
+                        reference_no, document_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (code, tx_type, abs(variance), now[:10],
+                     f"تعدیل شمارش {ref} | علت: {why}", document_no, actor, ref, document_id),
                 )
                 tx_id = int(cursor.lastrowid)
             conn.execute("""
                 INSERT INTO stock_adjustments
                 (reference, product_code, system_stock, counted_stock, variance, reason,
-                 username, created_at, transaction_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (ref, code, current, counted, variance, why, actor, now, tx_id))
+                 username, created_at, transaction_id, document_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ref, code, current, counted, variance, why, actor, now, tx_id, document_id))
             conn.execute(
                 "INSERT INTO audit_log(occurred_at, username, event, details) VALUES (?, ?, ?, ?)",
                 (now, actor[:80], "stock_adjustment_created",
-                 f"ref={ref}; code={code}; before={current:g}; counted={counted:g}; variance={variance:g}; reason={why}"[:500]),
+                 f"ref={ref}; code={code}; before={current:g}; counted={counted:g}; variance={variance:g}; document={document_no}; reason={why}"[:500]),
             )
         return {
             "reference": ref,
@@ -130,6 +153,8 @@ class StockAdjustmentService:
             "counted_stock": counted,
             "variance": variance,
             "transaction_id": tx_id,
+            "document_id": document_id,
+            "document_no": document_no,
             "created_at": now,
         }
 
