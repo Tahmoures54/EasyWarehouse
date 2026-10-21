@@ -511,7 +511,7 @@ class MainWindow(tk.Tk):
 
         developer_ad = ttk.Label(
             status,
-            text="طراحی و توسعه نرم‌افزار | تماس: 0916 068 4552",
+            text="طراحی و توسعه نرم‌افزار | ارتباط در واتساپ",
             style="Status.TLabel",
             cursor="hand2",
         )
@@ -552,7 +552,7 @@ class MainWindow(tk.Tk):
 
     @staticmethod
     def _contact_developer() -> None:
-        """راه تماس را باز می‌کند؛ شماره نیز برای تماس دستی نمایش داده می‌شود."""
+        """پیوند واتساپ توسعه‌دهنده را بدون نمایش شماره باز می‌کند."""
         try:
             webbrowser.open("https://wa.me/989160684552")
         except Exception:
