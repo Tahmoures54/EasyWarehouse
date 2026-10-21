@@ -100,4 +100,49 @@ def print_transaction(tx, operator: str = "") -> Path:
     return path
 
 
-__all__ = ["build_voucher_html", "print_transaction"]
+
+def build_kardex_html(product, rows, start_label: str = "", end_label: str = "", movement_filter: str = "همه گردش‌ها") -> str:
+    """ساخت گزارش HTML چاپ‌پذیر کاردکس با escape کردن متن‌های ورودی."""
+    if product is None:
+        raise ValueError("برای چاپ کاردکس باید کالا انتخاب شود.")
+    product_code = getattr(product, "user_code", "") or getattr(product, "code", "")
+    product_name = getattr(product, "name", "")
+    unit = getattr(product, "unit", "")
+    body_rows = []
+    for row in rows:
+        try:
+            shown_date = to_jalali(row.get("date", "")) if row.get("date") else ""
+        except (TypeError, ValueError):
+            shown_date = row.get("date", "")
+        values = (
+            row.get("document_no", ""), shown_date, row.get("type", ""),
+            f'{row.get("incoming", 0):g}', f'{row.get("outgoing", 0):g}',
+            f'{row.get("balance", 0):g}', row.get("unit", unit), row.get("note", "")
+        )
+        body_rows.append("<tr>" + "".join(f"<td>{_safe(value)}</td>" for value in values) + "</tr>")
+    table_rows = "\n".join(body_rows) or '<tr><td colspan="8">گردشی برای نمایش وجود ندارد.</td></tr>'
+    opening = next((r.get("balance", 0) for r in rows if r.get("type") == "مانده ابتدای دوره"), 0)
+    movements = [r for r in rows if r.get("type") != "مانده ابتدای دوره"]
+    total_in = sum(float(r.get("incoming", 0) or 0) for r in movements)
+    total_out = sum(float(r.get("outgoing", 0) or 0) for r in movements)
+    ending = rows[-1].get("balance", opening) if rows else opening
+    return f"""<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>کاردکس {_safe(product_name)}</title><style>
+@page {{ size:A4 landscape; margin:10mm; }} body{{font-family:Tahoma,Arial,sans-serif;color:#17212b;font-size:10pt}}
+h1{{font-size:18pt;margin-bottom:6px}} .meta{{margin:8px 0 14px;line-height:1.9}}
+table{{width:100%;border-collapse:collapse}} th,td{{border:1px solid #b8c5ce;padding:6px;text-align:right;vertical-align:top}}
+th{{background:#edf4f6}} .summary{{margin:12px 0;padding:10px;border:1px solid #cbd5df;line-height:1.9}}
+button{{padding:8px 14px;background:#087f8c;color:white;border:0;font:inherit;cursor:pointer}}
+@media print{{button{{display:none}}}}
+</style></head><body><button onclick="window.print()">چاپ / ذخیره PDF</button>
+<h1>گزارش کاردکس کالا</h1>
+<div class="meta">کد کالا: {_safe(product_code)} | نام کالا: {_safe(product_name)} | واحد: {_safe(unit)}<br>
+از تاریخ: {_safe(start_label or "ابتدای سابقه")} | تا تاریخ: {_safe(end_label or "بدون محدودیت")} | فیلتر گردش: {_safe(movement_filter)}</div>
+<div class="summary">مانده ابتدای دوره: {opening:g} {_safe(unit)} | جمع ورود ردیف‌های نمایش‌داده‌شده: {total_in:g} | جمع خروج ردیف‌های نمایش‌داده‌شده: {total_out:g} | مانده آخرین ردیف نمایش‌داده‌شده: {ending:g} {_safe(unit)}</div>
+<table><thead><tr><th>شماره سند</th><th>تاریخ</th><th>شرح</th><th>ورود</th><th>خروج</th><th>مانده</th><th>واحد</th><th>توضیحات</th></tr></thead>
+<tbody>{table_rows}</tbody></table><p>گزارش تولیدشده توسط EasyWarehouse؛ چاپ یا ذخیره PDF از طریق مرورگر انجام می‌شود.</p>
+</body></html>"""
+
+
+__all__ = ["build_voucher_html", "build_kardex_html", "print_transaction"]
