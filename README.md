@@ -1,6 +1,6 @@
 # EasyWarehouse
 
-برنامه دسکتاپ مدیریت انبار با Python/Tkinter و SQLite. نسخه کد فعلی: **1.1.0**. مخزن: https://github.com/Tahmoures54/EasyWarehouse
+برنامه دسکتاپ مدیریت انبار با Python/Tkinter و SQLite. نسخه کد فعلی: **1.2.0**. مخزن: https://github.com/Tahmoures54/EasyWarehouse
 
 > وضعیت انتشار: وجود سورس و workflow به‌تنهایی به معنی تأیید پروداکشن نیست. قبل از اعلام انتشار، وضعیت آخرین اجرای GitHub Actions و آزمایش دستی EXE روی ویندوز تمیز را بررسی کنید.
 
