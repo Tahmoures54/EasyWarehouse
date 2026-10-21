@@ -87,6 +87,7 @@ def test_kardex_accepts_user_code_and_exports_csv(tmp_path):
     assert rows[-1]["balance"] == 4
     assert rows[-1]["code"] == "FLT-1"
     assert rows[-1]["name"] == "فیلتر"
+    assert rows[-1]["document_no"] == "EW-000001"
     path = reports.export_kardex_csv(tmp_path / "kardex.csv", "FLT-1")
     assert path.exists()
     assert path.read_bytes().startswith(b"\xef\xbb\xbf")
