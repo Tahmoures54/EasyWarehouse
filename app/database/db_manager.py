@@ -48,7 +48,7 @@ class DB:
     برای گزارش‌های سنگین، یک کوئری کافی است (نه حلقه روی رکوردها).
     """
 
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
 
     def __init__(self, path: Optional[Union[str, Path]] = None) -> None:
         self.path = self._resolve_path(path)
@@ -162,6 +162,7 @@ class DB:
                 self._migrate_products(conn)
                 self._apply_schema(conn, schema_file)
                 self._ensure_product_columns(conn)
+                self._ensure_transaction_document_columns(conn)
                 self._stamp_version(conn)
                 conn.commit()
         except DatabaseError:
@@ -298,6 +299,33 @@ class DB:
         for column, statement in migrations.items():
             if column not in columns:
                 conn.execute(statement)
+
+    @staticmethod
+    def _ensure_transaction_document_columns(conn: sqlite3.Connection) -> None:
+        """افزودن فیلدهای سند به گردش‌های قدیمی بدون حذف داده‌ها."""
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(transactions)")}
+        if not columns:
+            raise DatabaseError("جدول transactions پس از اجرای schema.sql ساخته نشد.")
+        migrations = {
+            "document_no": "ALTER TABLE transactions ADD COLUMN document_no TEXT NOT NULL DEFAULT ''",
+            "party_name": "ALTER TABLE transactions ADD COLUMN party_name TEXT NOT NULL DEFAULT ''",
+            "delivered_by": "ALTER TABLE transactions ADD COLUMN delivered_by TEXT NOT NULL DEFAULT ''",
+            "received_by": "ALTER TABLE transactions ADD COLUMN received_by TEXT NOT NULL DEFAULT ''",
+            "reference_no": "ALTER TABLE transactions ADD COLUMN reference_no TEXT NOT NULL DEFAULT ''",
+        }
+        for column, statement in migrations.items():
+            if column not in columns:
+                conn.execute(statement)
+        conn.execute(
+            "UPDATE transactions SET document_no = 'EW-' || printf('%06d', id) "
+            "WHERE document_no IS NULL OR trim(document_no) = ''"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_document_no ON transactions(document_no)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tx_party_name ON transactions(party_name)"
+        )
 
     def _stamp_version(self, conn: sqlite3.Connection) -> None:
         current = int(conn.execute("PRAGMA user_version").fetchone()[0] or 0)
