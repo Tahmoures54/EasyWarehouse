@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.database.db_manager import DB, DatabaseError
@@ -142,7 +142,7 @@ class UserService:
         actual = self._password_material(password, bytes(row["password_salt"]))
         if not hmac.compare_digest(actual, bytes(row["password_hash"])):
             failed = int(row["failed_attempts"]) + 1
-            locked = (now.replace(microsecond=0) + __import__("datetime").timedelta(minutes=_LOCK_MINUTES)).isoformat() if failed >= _MAX_FAILED_ATTEMPTS else None
+            locked = (now.replace(microsecond=0) + timedelta(minutes=_LOCK_MINUTES)).isoformat() if failed >= _MAX_FAILED_ATTEMPTS else None
             self.db.execute(
                 "UPDATE app_users SET failed_attempts=?, locked_until=? WHERE id=?",
                 (failed, locked, row["id"]),
