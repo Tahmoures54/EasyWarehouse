@@ -62,3 +62,20 @@ def test_adjustment_requires_reason_and_never_changes_stock_for_zero_variance(tm
                             expected_system_stock=4, reference="COUNT-006")
     assert result["transaction_id"] is None
     assert products.get(product.code).stock == 4
+
+
+def test_adjustment_movement_is_linked_to_a_warehouse_document(tmp_path):
+    db, products, transactions, service = _setup(tmp_path)
+    product = products.add("قطعه")
+    result = service.create(product.code, 6, "شمارش", "operator",
+                            expected_system_stock=0, reference="COUNT-DOC-01")
+    assert result["document_id"] is not None
+    assert result["document_no"]
+    tx = db.one("SELECT document_id, document_no FROM transactions WHERE id=?",
+                (result["transaction_id"],))
+    assert tx["document_id"] == result["document_id"]
+    assert tx["document_no"] == result["document_no"]
+    doc = db.one("SELECT document_no, reference_no FROM warehouse_documents WHERE id=?",
+                 (result["document_id"],))
+    assert doc["document_no"] == result["document_no"]
+    assert doc["reference_no"] == "COUNT-DOC-01"
