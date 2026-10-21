@@ -149,7 +149,7 @@ class TransactionForm(ttk.LabelFrame):
         self._date_entry.bind("<Return>", lambda _e: self._submit())
 
         tk.Label(
-            self, text="توضیحات / شماره سند", bg=T.CARD_BG, fg=T.TEXT,
+            self, text="توضیحات", bg=T.CARD_BG, fg=T.TEXT,
             font=T.FONT_BOLD, anchor="e",
         ).grid(row=6, column=0, sticky="e", pady=(0, 5))
         self.note_var = tk.StringVar()
@@ -160,12 +160,40 @@ class TransactionForm(ttk.LabelFrame):
         self._note_entry.grid(row=7, column=0, sticky="ew", ipady=4)
         self._note_entry.bind("<Return>", lambda _e: self._submit())
 
+        # Document metadata persisted with each stock movement.
+        document_fields = tk.Frame(self, bg=T.CARD_BG)
+        document_fields.grid(row=8, column=0, sticky="ew", pady=(10, 0))
+        document_fields.columnconfigure(0, weight=1, uniform="document_fields")
+        document_fields.columnconfigure(1, weight=1, uniform="document_fields")
+        tk.Label(document_fields, text="طرف حساب / واحد", bg=T.CARD_BG,
+                 fg=T.TEXT, font=T.FONT_BOLD, anchor="e").grid(
+            row=0, column=0, sticky="ew", padx=(8, 0), pady=(0, 5))
+        tk.Label(document_fields, text="شماره مرجع (اختیاری)", bg=T.CARD_BG,
+                 fg=T.TEXT, font=T.FONT_BOLD, anchor="e").grid(
+            row=0, column=1, sticky="ew", padx=(0, 8), pady=(0, 5))
+        self.party_var, self.reference_var = tk.StringVar(), tk.StringVar()
+        ttk.Entry(document_fields, textvariable=self.party_var, justify="right").grid(
+            row=1, column=0, sticky="ew", padx=(8, 0), ipady=4, pady=(0, 10))
+        ttk.Entry(document_fields, textvariable=self.reference_var, justify="right").grid(
+            row=1, column=1, sticky="ew", padx=(0, 8), ipady=4, pady=(0, 10))
+        tk.Label(document_fields, text="تحویل‌دهنده", bg=T.CARD_BG,
+                 fg=T.TEXT, font=T.FONT_BOLD, anchor="e").grid(
+            row=2, column=0, sticky="ew", padx=(8, 0), pady=(0, 5))
+        tk.Label(document_fields, text="تحویل‌گیرنده", bg=T.CARD_BG,
+                 fg=T.TEXT, font=T.FONT_BOLD, anchor="e").grid(
+            row=2, column=1, sticky="ew", padx=(0, 8), pady=(0, 5))
+        self.delivered_var, self.received_var = tk.StringVar(), tk.StringVar()
+        ttk.Entry(document_fields, textvariable=self.delivered_var, justify="right").grid(
+            row=3, column=0, sticky="ew", padx=(8, 0), ipady=4, pady=(0, 4))
+        ttk.Entry(document_fields, textvariable=self.received_var, justify="right").grid(
+            row=3, column=1, sticky="ew", padx=(0, 8), ipady=4, pady=(0, 4))
+
         # Actions
         ttk.Separator(self, orient="horizontal").grid(
-            row=8, column=0, sticky="ew", pady=(14, 10)
+            row=9, column=0, sticky="ew", pady=(14, 10)
         )
         actions = ttk.Frame(self)
-        actions.grid(row=9, column=0, sticky="ew")
+        actions.grid(row=10, column=0, sticky="ew")
         actions.columnconfigure(0, weight=1)
         ttk.Button(
             actions, text="✓  ثبت تراکنش", style="Primary.TButton",
@@ -255,6 +283,10 @@ class TransactionForm(ttk.LabelFrame):
                 qty,
                 tx_date,
                 self.note_var.get().strip(),
+                party_name=self.party_var.get().strip(),
+                delivered_by=self.delivered_var.get().strip(),
+                received_by=self.received_var.get().strip(),
+                reference_no=self.reference_var.get().strip(),
             )
         except Exception as exc:  # noqa: BLE001 — نمایش خطای دامنه به کاربر
             logger.exception("Transaction add failed")
@@ -282,6 +314,10 @@ class TransactionForm(ttk.LabelFrame):
         self.prod_var.set("")
         self.qty_var.set("")
         self.note_var.set("")
+        self.party_var.set("")
+        self.reference_var.set("")
+        self.delivered_var.set("")
+        self.received_var.set("")
         self.date_var.set(today_jalali())
         if not preserve_type:
             self.type_var.set(next(iter(TYPES), "IN"))
