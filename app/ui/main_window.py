@@ -705,6 +705,8 @@ class MainWindow(tk.Tk):
             self._reload_product_tree(tree, search_var.get())
 
         def edit_selected() -> None:
+            if not self._require_role("admin", "operator", action="ویرایش کالا"):
+                return
             selection = tree.selection()
             if not selection:
                 messagebox.showinfo(
@@ -721,6 +723,8 @@ class MainWindow(tk.Tk):
 
         def find_or_add_by_code() -> None:
             """کد موجود را انتخاب کن؛ در غیر این صورت فرم ثبت را با کد باز کن."""
+            if not self._require_role("admin", "operator", action="ثبت کالا"):
+                return
             user_code = entry_code_var.get().strip()
             if not user_code:
                 messagebox.showinfo(
@@ -769,6 +773,8 @@ class MainWindow(tk.Tk):
         code_entry.bind("<Return>", lambda _e: find_or_add_by_code())
 
         def delete_selected() -> None:
+            if not self._require_role("admin", action="حذف کالا"):
+                return
             selection = tree.selection()
             if not selection:
                 messagebox.showinfo(
@@ -1108,6 +1114,8 @@ class MainWindow(tk.Tk):
                 logger.debug("Old DB close failed", exc_info=True)
 
         self.db = DB()
+        from app.services.user_service import UserService
+        self.users = UserService(self.db)
         self._init_services()  # در صورت خالی بودن DB جدید، seed اجرا می‌شود
 
         # اگر فرم ثبت تراکنش باز است، آن را ببند تا به سرویس‌های جدید وصل شود.
