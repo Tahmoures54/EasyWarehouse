@@ -3,7 +3,7 @@
 
 from types import SimpleNamespace
 
-from app.services.print_service import build_voucher_html
+from app.services.print_service import build_kardex_html, build_voucher_html
 
 
 def _tx(type_="IN", note="تحویل <آزمایشی>"):
@@ -42,3 +42,19 @@ def test_html_escapes_user_supplied_values():
     assert "&lt;script&gt;" in html
     assert "<script>alert(1)</script>" not in html
     assert "رسید عودت کالا" in html
+
+
+def test_kardex_print_filters_rows_and_escapes_text():
+    product = SimpleNamespace(code="P-1", user_code="P-1", name="کالا <نمونه>", unit="عدد")
+    rows = [
+        {"id": "", "document_no": "", "date": "2026-10-01", "type": "مانده ابتدای دوره", "incoming": 0, "outgoing": 0, "balance": 8, "unit": "عدد", "note": ""},
+        {"id": 1, "document_no": "EW-000001", "date": "2026-10-02", "type": "ورود", "incoming": 5, "outgoing": 0, "balance": 13, "unit": "عدد", "note": "<script>bad()</script>"},
+        {"id": 2, "document_no": "EW-000002", "date": "2026-10-03", "type": "خروج", "incoming": 0, "outgoing": 2, "balance": 11, "unit": "عدد", "note": "مصرف"},
+    ]
+    html = build_kardex_html(product, rows, "1405/07/10", "1405/07/12", "خروج")
+    assert "کاردکس کالا" in html
+    assert "EW-000002" in html
+    assert "EW-000001" not in html
+    assert "&lt;script&gt;bad()&lt;/script&gt;" not in html
+    assert "&lt;نمونه&gt;" in html
+    assert "مانده پایان دوره: 11" in html
