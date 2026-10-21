@@ -179,20 +179,28 @@ class TransactionService:
                 if warning and stock - quantity < 0 and not overdraw_allowed:
                     raise ValueError(warning + "\nثبت خروج انجام نشد.")
 
+            header = conn.execute(
+                """INSERT INTO warehouse_documents
+                   (document_no, type, date, note, party_name, delivered_by, received_by, reference_no)
+                   VALUES ('', ?, ?, ?, ?, ?, ?, ?)""",
+                (type_normalized, transaction_date, note_value, party_value,
+                 delivered_value, received_value, reference_value),
+            )
+            document_id = int(header.lastrowid)
+            document_no = f"EW-{document_id:06d}"
+            conn.execute("UPDATE warehouse_documents SET document_no=? WHERE id=?", (document_no, document_id))
             cursor = conn.execute(
                 """INSERT INTO transactions
                    (code, type, qty, date, note, document_no, party_name,
-                    delivered_by, received_by, reference_no)
-                   VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)""",
+                    delivered_by, received_by, reference_no, document_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (product_code, type_normalized, quantity, transaction_date, note_value,
-                 party_value, delivered_value, received_value, reference_value),
+                 document_no, party_value, delivered_value, received_value, reference_value,
+                 document_id),
             )
             new_id = cursor.lastrowid
-            if new_id is not None:
-                conn.execute(
-                    "UPDATE transactions SET document_no = ? WHERE id = ?",
-                    (f"EW-{int(new_id):06d}", new_id),
-                )
+            if new_id is None:
+                raise RuntimeError("شناسهٔ تراکنش جدید از دیتابیس دریافت نشد.")
             if new_id is None:
                 raise RuntimeError(
                     "شناسهٔ تراکنش جدید از دیتابیس دریافت نشد."
@@ -214,13 +222,103 @@ class TransactionService:
             name=name,
             unit=unit,
             user_code=user_code,
-            document_no=f"EW-{int(new_id):06d}",
+            document_no=document_no,
             party_name=party_value,
             delivered_by=delivered_value,
             received_by=received_value,
             reference_no=reference_value,
         )
         return transaction, warning
+
+    def add_document(
+        self,
+        items: list[dict],
+        date_str: Optional[str] = None,
+        note: str = "",
+        party_name: str = "",
+        delivered_by: str = "",
+        received_by: str = "",
+        reference_no: str = "",
+        allow_overdraw: Optional[bool] = None,
+    ) -> Tuple[list[Transaction], list[str], str]:
+        """ثبت اتمیک یک سند با چند قلم؛ در صورت خطا هیچ ردیفی ذخیره نمی‌شود."""
+        if not isinstance(items, list) or not items:
+            raise ValueError("برای ثبت سند، دست‌کم یک قلم کالا اضافه کنید.")
+        tx_date = validate_transaction_date(date_str)
+        doc_note = (note or "").strip()
+        party = (party_name or "").strip()
+        delivered = (delivered_by or "").strip()
+        received = (received_by or "").strip()
+        reference = (reference_no or "").strip()
+        overdraw_allowed = ALLOW_NEGATIVE_STOCK if allow_overdraw is None else allow_overdraw
+        if not isinstance(overdraw_allowed, bool):
+            raise ValueError("سیاست موجودی منفی باید روشن یا خاموش باشد.")
+
+        normalized = []
+        for item in items:
+            code = str(item.get("code", "")).strip()
+            kind = str(item.get("type", "")).strip().upper()
+            if not code:
+                raise ValueError("یکی از اقلام سند کد کالا ندارد.")
+            if kind not in TYPES:
+                raise ValueError("نوع تراکنش باید ورود، خروج یا عودت باشد.")
+            try:
+                qty = float(item.get("qty"))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("مقدار یکی از اقلام معتبر نیست.") from exc
+            if not math.isfinite(qty) or qty <= 0:
+                raise ValueError("مقدار هر قلم باید عددی متناهی و بزرگ‌تر از صفر باشد.")
+            normalized.append((code, kind, qty))
+
+        saved: list[Transaction] = []
+        warnings: list[str] = []
+        with self.db.transaction() as conn:
+            header = conn.execute(
+                """INSERT INTO warehouse_documents
+                   (document_no, type, date, note, party_name, delivered_by, received_by, reference_no)
+                   VALUES ('', ?, ?, ?, ?, ?, ?, ?)""",
+                (normalized[0][1], tx_date, doc_note, party, delivered, received, reference),
+            )
+            doc_id = int(header.lastrowid)
+            document_no = f"EW-{doc_id:06d}"
+            conn.execute(
+                "UPDATE warehouse_documents SET document_no = ? WHERE id = ?",
+                (document_no, doc_id),
+            )
+            for code, kind, qty in normalized:
+                product = conn.execute(
+                    f"""SELECT p.code, p.user_code, p.name, p.unit, p.min_stock,
+                        COALESCE(SUM({STOCK_CASE}), 0) AS stock
+                        FROM products p LEFT JOIN transactions t ON p.code=t.code
+                        WHERE p.code=? GROUP BY p.code""", (code,)
+                ).fetchone()
+                if not product:
+                    raise ValueError(f"کالایی با کد {code} یافت نشد؛ سند ثبت نشد.")
+                stock = float(product["stock"] or 0)
+                unit = product["unit"] or "عدد"
+                min_stock = float(product["min_stock"] or 0)
+                if kind == "OUT":
+                    warning = self._evaluate_outgoing(stock, qty, min_stock, unit)
+                    if warning:
+                        if stock - qty < 0 and not overdraw_allowed:
+                            raise ValueError(warning + "\nثبت کل سند انجام نشد.")
+                        warnings.append(f"{product['name']}: {warning}")
+                cur = conn.execute(
+                    """INSERT INTO transactions
+                       (code, type, qty, date, note, document_no, party_name,
+                        delivered_by, received_by, reference_no, document_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (code, kind, qty, tx_date, doc_note, document_no, party,
+                     delivered, received, reference, doc_id),
+                )
+                saved.append(Transaction(
+                    id=int(cur.lastrowid), code=code, type=kind, qty=qty, date=tx_date,
+                    note=doc_note, name=product["name"] or "", unit=unit,
+                    user_code=product["user_code"] or code, document_no=document_no,
+                    party_name=party, delivered_by=delivered, received_by=received,
+                    reference_no=reference,
+                ))
+        return saved, warnings, document_no
 
     @staticmethod
     def _evaluate_outgoing(
