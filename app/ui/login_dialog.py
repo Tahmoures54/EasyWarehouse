@@ -7,6 +7,7 @@ import logging
 import tkinter as tk
 from tkinter import ttk
 
+from app.config import APP_BRAND
 from app.services.user_service import AuthenticationError, UserService
 from app.ui import theme as T
 
@@ -26,7 +27,7 @@ class LoginDialog(tk.Toplevel):
         super().__init__(parent)
         self.users = users
         self.user: dict | None = None
-        self.title("ورود به EasyWarehouse")
+        self.title(f"ورود به {APP_BRAND}")
         self.configure(bg=T.BG)
         self.resizable(False, False)
 
@@ -68,7 +69,7 @@ class LoginDialog(tk.Toplevel):
         card.pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
         brand = ttk.Frame(card, style="Header.TFrame", padding=(12, 10))
         brand.pack(fill=tk.X, pady=(0, 18))
-        ttk.Label(brand, text="EasyWarehouse", style="Header.TLabel").pack(anchor="center", pady=(0, 4))
+        ttk.Label(brand, text=APP_BRAND, style="Header.TLabel").pack(anchor="center", pady=(0, 4))
         ttk.Label(brand, text="مدیریت انبار امن و محلی", style="Header.Subtitle.TLabel").pack(anchor="center")
 
         self.setup_mode = not self.users.has_users()
