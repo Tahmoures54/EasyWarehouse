@@ -238,3 +238,52 @@ def test_invalid_jalali_date_rejected():
     for value in ("1405/13/01", "1405/12/30", "1405/07/xx", ""):
         with pytest.raises(ValueError):
             from_jalali(value)
+
+
+def test_void_document_preserves_original_lines_and_records_reversal(services):
+    ps, ts = services
+    p1 = ps.add("کالای اول")
+    p2 = ps.add("کالای دوم")
+    ts.add(p1.code, "IN", 10, "2026-10-01")
+    ts.add(p2.code, "IN", 12, "2026-10-01")
+    original, _, document_no = ts.add_document([
+        {"code": p1.code, "type": "OUT", "qty": 3},
+        {"code": p2.code, "type": "OUT", "qty": 4},
+    ], date_str="2026-10-02")
+    before_ids = [tx.id for tx in original]
+    reversal_no = ts.void_document(document_no, "admin", "ثبت اشتباه")
+    assert ps.get(p1.code).stock == 10
+    assert ps.get(p2.code).stock == 12
+    assert [tx.id for tx in ts.document_lines(before_ids[0])] == before_ids
+    original_doc = ts.db.one("SELECT status FROM warehouse_documents WHERE document_no=?",
+                             (document_no,))
+    assert original_doc["status"] == "VOID"
+    reversal = ts.db.one("SELECT reference_no FROM warehouse_documents WHERE document_no=?",
+                         (reversal_no,))
+    assert reversal["reference_no"] == document_no
+    event = ts.db.one("SELECT event, details FROM audit_log ORDER BY id DESC LIMIT 1")
+    assert event["event"] == "warehouse_document_voided"
+    assert "ثبت اشتباه" in event["details"]
+    with pytest.raises(ValueError, match="قبلاً ابطال"):
+        ts.void_document(document_no, "admin", "تلاش مجدد")
+
+
+def test_void_document_requires_reason_and_keeps_stock_unchanged(services):
+    ps, ts = services
+    product = ps.add("کالای تست")
+    _, _, document_no = ts.add_document([
+        {"code": product.code, "type": "IN", "qty": 2},
+    ], date_str="2026-10-01")
+    with pytest.raises(ValueError, match="علت"):
+        ts.void_document(document_no, "admin", " ")
+    assert ps.get(product.code).stock == 2
+
+
+def test_search_can_find_historical_transactions_by_note(services):
+    ps, ts = services
+    product = ps.add("کالای سابقه")
+    ts.add(product.code, "IN", 1, "2024-01-01", "ARCHIVE-SEARCH-MARKER")
+    results = ts.search(query="ARCHIVE-SEARCH-MARKER", limit=5000)
+    assert len(results) == 1
+    assert results[0].date == "2024-01-01"
+    assert results[0].note == "ARCHIVE-SEARCH-MARKER"

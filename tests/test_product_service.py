@@ -104,3 +104,41 @@ def test_legacy_database_migration_preserves_transactions_and_allows_duplicate_n
     assert migrated.get(second.code).stock == 0
     with sqlite3.connect(path) as check:
         assert check.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_migrated_products_table_retains_structural_checks(tmp_path):
+    path = tmp_path / "legacy-checks.db"
+    conn = sqlite3.connect(path)
+    conn.executescript("""
+        CREATE TABLE products (
+            code TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            unit TEXT NOT NULL DEFAULT 'عدد',
+            min_stock REAL NOT NULL DEFAULT 0,
+            category TEXT NOT NULL DEFAULT 'عمومی',
+            shelf TEXT NOT NULL DEFAULT ''
+        );
+        INSERT INTO products(code, name, min_stock, category)
+        VALUES ('P001', 'کالای قدیمی', -3, 'دسته قدیمی');
+    """)
+    conn.commit()
+    conn.close()
+
+    DB(path=path)  # مهاجرت باید داده قدیمی ناسازگار را به مقدار معتبر تبدیل کند.
+    with sqlite3.connect(path) as check:
+        row = check.execute(
+            "SELECT min_stock, category FROM products WHERE code='P001'"
+        ).fetchone()
+        assert row == (0.0, "عمومی")
+        with pytest.raises(sqlite3.IntegrityError):
+            check.execute(
+                "INSERT INTO products(code, name, min_stock) VALUES ('BAD1', 'نامعتبر', -1)"
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            check.execute(
+                "INSERT INTO products(code, name, category) VALUES ('BAD2', 'دسته نامعتبر', 'غلط')"
+            )
+        with pytest.raises(sqlite3.IntegrityError):
+            check.execute(
+                "INSERT INTO products(code, name) VALUES ('BAD3', '   ')"
+            )

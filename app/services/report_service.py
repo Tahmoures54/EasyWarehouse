@@ -284,11 +284,29 @@ class ReportService:
         if start and end and start > end:
             raise ValueError("تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.")
 
+        # کد داخلی اولویت قطعی دارد؛ کد تجاری تکراری نباید بی‌صدا
+        # به یکی از چند کالا نگاشت شود.
         product = self.db.one(
-            "SELECT code, user_code, name, unit FROM products "
-            "WHERE code = ? OR user_code = ? ORDER BY CASE WHEN code = ? THEN 0 ELSE 1 END LIMIT 1",
-            (value, value, value),
+            "SELECT code, user_code, name, unit FROM products WHERE code = ?",
+            (value,),
         )
+        if not product:
+            matches = self.db.all(
+                "SELECT code, user_code, name FROM products WHERE user_code = ? "
+                "ORDER BY name COLLATE NOCASE, code",
+                (value,),
+            )
+            if len(matches) > 1:
+                choices = "، ".join(f"{r['name']} (شناسه داخلی: {r['code']})" for r in matches)
+                raise ValueError(
+                    f"کد تجاری «{value}» تکراری است و کاردکس مبهم می‌شود. "
+                    f"لطفاً شناسه داخلی کالا را وارد کنید: {choices}"
+                )
+            if matches:
+                product = self.db.one(
+                    "SELECT code, user_code, name, unit FROM products WHERE code = ?",
+                    (matches[0]["code"],),
+                )
         if not product:
             raise ValueError(f"کالایی با کد «{value}» یافت نشد.")
         internal_code = product["code"]
@@ -312,8 +330,12 @@ class ReportService:
             params.append(end)
 
         transactions = self.db.all(
-            f"""SELECT t.id, t.date, t.type, t.qty, t.note
-                FROM transactions t WHERE {" AND ".join(clauses)}
+            f"""SELECT t.id, t.date, t.type, t.qty, t.note,
+                       COALESCE(NULLIF(d.document_no, ''), NULLIF(t.document_no, ''),
+                                'EW-' || printf('%06d', t.id)) AS resolved_document_no
+                FROM transactions t
+                LEFT JOIN warehouse_documents d ON d.id = t.document_id
+                WHERE {" AND ".join(clauses)}
                 ORDER BY t.date ASC, t.id ASC""",
             tuple(params),
         )
@@ -328,7 +350,7 @@ class ReportService:
             balance += incoming - outgoing
             rows.append({
                 "id": int(tx["id"]),
-                "document_no": f"EW-{int(tx['id']):06d}",
+                "document_no": tx["resolved_document_no"],
                 "date": tx["date"],
                 "code": product["user_code"] or internal_code,
                 "name": product["name"] or "",

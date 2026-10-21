@@ -356,6 +356,100 @@ class TransactionService:
             )
         return None
 
+    # ----------------------------------------------------- document void/correction
+
+    def void_document(self, document_no: str, username: str, reason: str) -> str:
+        """ابطال یک سند کامل بدون حذف سابقه؛ با سند معکوس و ثبت رویداد حسابرسی.
+
+        گردش‌های اصلی دست‌نخورده می‌مانند. اثر موجودی با یک سند معکوس خنثی
+        می‌شود و سربرگ اصلی به وضعیت VOID می‌رود.
+        """
+        number = (document_no or "").strip()
+        actor = (username or "").strip()
+        why = (reason or "").strip()
+        if not number:
+            raise ValueError("شماره سند الزامی است.")
+        if not actor:
+            raise ValueError("کاربر ابطال‌کننده مشخص نیست.")
+        if not why:
+            raise ValueError("علت ابطال/اصلاح سند الزامی است.")
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        inverse = {"IN": "OUT", "OUT": "IN", "RETURN": "OUT"}
+        with self.db.transaction() as conn:
+            doc = conn.execute(
+                "SELECT * FROM warehouse_documents WHERE document_no = ?", (number,)
+            ).fetchone()
+            if doc is None:
+                raise ValueError(f"سندی با شماره «{number}» یافت نشد.")
+            if doc["status"] != "POSTED":
+                raise ValueError("این سند قبلاً ابطال شده و دوباره قابل ابطال نیست.")
+            lines = conn.execute(
+                "SELECT * FROM transactions WHERE document_id = ? ORDER BY id",
+                (doc["id"],),
+            ).fetchall()
+            if not lines:
+                raise ValueError("سند قلمی ندارد؛ ابطال انجام نشد.")
+            # پیش‌اعتبارسنجی خروج‌های سند معکوس تا سند ناقص یا موجودی ناخواسته ایجاد نشود.
+            if not ALLOW_NEGATIVE_STOCK:
+                deltas: dict[str, float] = {}
+                for line in lines:
+                    kind = inverse[line["type"]]
+                    delta = -float(line["qty"]) if kind == "OUT" else float(line["qty"])
+                    deltas[line["code"]] = deltas.get(line["code"], 0.0) + delta
+                for code, delta in deltas.items():
+                    stock_row = conn.execute(
+                        f"SELECT COALESCE(SUM({STOCK_CASE}), 0) FROM transactions t WHERE t.code=?",
+                        (code,),
+                    ).fetchone()
+                    if float(stock_row[0] or 0) + delta < -1e-9:
+                        raise ValueError(
+                            f"ابطال سند موجودی کالای «{code}» را منفی می‌کند؛ "
+                            "ابتدا موجودی را تأمین یا طبق سیاست مجازسازی موجودی منفی اقدام کنید."
+                        )
+            cur = conn.execute(
+                """INSERT INTO warehouse_documents
+                   (document_no, type, date, note, party_name, delivered_by,
+                    received_by, reference_no)
+                   VALUES ('', ?, ?, ?, ?, ?, ?, ?)""",
+                (inverse[lines[0]["type"]], doc["date"],
+                 f"سند معکوس {number} | علت: {why}", actor,
+                 doc["delivered_by"] or "", doc["received_by"] or "", number),
+            )
+            reversal_id = int(cur.lastrowid)
+            reversal_no = f"EW-{reversal_id:06d}"
+            conn.execute("UPDATE warehouse_documents SET document_no=? WHERE id=?",
+                         (reversal_no, reversal_id))
+            for line in lines:
+                kind = inverse[line["type"]]
+                conn.execute(
+                    """INSERT INTO transactions
+                       (code, type, qty, date, note, document_no, party_name,
+                        delivered_by, received_by, reference_no, document_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (line["code"], kind, line["qty"], doc["date"],
+                     f"ابطال سند {number} | علت: {why}", reversal_no, actor,
+                     doc["delivered_by"] or "", doc["received_by"] or "",
+                     number, reversal_id),
+                )
+            conn.execute("UPDATE warehouse_documents SET status='VOID' WHERE id=?",
+                         (doc["id"],))
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    occurred_at TEXT NOT NULL,
+                    username TEXT NOT NULL DEFAULT '',
+                    event TEXT NOT NULL,
+                    details TEXT NOT NULL DEFAULT ''
+                )
+            """)
+            conn.execute(
+                "INSERT INTO audit_log(occurred_at, username, event, details) VALUES (?, ?, ?, ?)",
+                (now, actor[:80], "warehouse_document_voided",
+                 f"document={number}; reversal={reversal_no}; reason={why}"[:500]),
+            )
+        return reversal_no
+
     # ------------------------------------------------------------- delete
 
     def delete(self, tx_id: int) -> None:
@@ -411,8 +505,9 @@ class TransactionService:
         end_date: Optional[str] = None,
         code: Optional[str] = None,
         limit: int = 500,
+        query: Optional[str] = None,
     ) -> List[Transaction]:
-        """جست‌وجوی سابقهٔ تراکنش‌ها با فیلتر تاریخ و کد."""
+        """جست‌وجوی سابقهٔ تراکنش‌ها با فیلتر تاریخ، کد و متن آزاد."""
         start = validate_transaction_date(start_date) if start_date else None
         end = validate_transaction_date(end_date) if end_date else None
         if start and end and start > end:
@@ -431,6 +526,15 @@ class TransactionService:
             if value:
                 clauses.append("(t.code = ? OR p.user_code = ?)")
                 params.extend([value, value])
+        if query and str(query).strip():
+            needle = "%" + str(query).strip() + "%"
+            clauses.append("""(
+                CAST(t.id AS TEXT) LIKE ? OR t.date LIKE ? OR t.code LIKE ?
+                OR COALESCE(p.user_code, '') LIKE ? OR COALESCE(p.name, '') LIKE ?
+                OR COALESCE(t.note, '') LIKE ? OR COALESCE(t.document_no, '') LIKE ?
+                OR COALESCE(t.party_name, '') LIKE ? OR COALESCE(t.reference_no, '') LIKE ?
+            )""")
+            params.extend([needle] * 9)
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
         if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:

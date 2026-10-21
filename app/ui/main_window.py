@@ -7,7 +7,7 @@ import logging
 import tkinter as tk
 import webbrowser
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Any, Callable, Optional
 
 from app.config import (
@@ -189,6 +189,8 @@ class MainWindow(tk.Tk):
             label="چاپ رسید / حواله گردش انتخاب‌شده...",
             command=self._print_selected_transaction,
         )
+        if self.current_user["role"] == "admin":
+            report_m.add_command(label="ابطال سند کامل...", command=self._void_document_dialog)
         menubar.add_cascade(label="گزارش‌ها", menu=report_m)
 
         help_m = tk.Menu(menubar, tearoff=0)
@@ -394,7 +396,7 @@ class MainWindow(tk.Tk):
         )
         self.transaction_search_entry.bind(
             "<KeyRelease>",
-            lambda _e: self.table.filter(self.tx_search_var.get()),
+            lambda _e: self._search_transaction_history(),
         )
         self.transaction_search_entry.bind(
             "<Escape>", self._clear_transaction_search
@@ -692,6 +694,18 @@ class MainWindow(tk.Tk):
                 tk.END,
                 f"… و {len(issues) - _LOW_LIST_LIMIT} مورد دیگر",
             )
+
+    def _search_transaction_history(self) -> None:
+        """جست‌وجو در سابقه دیتابیس، نه فقط ردیف‌های بارگذاری‌شده."""
+        query = self.tx_search_var.get().strip()
+        try:
+            rows = self.ts.search(query=query, limit=5000) if query else self.ts.all(limit=_TX_LOAD_LIMIT)
+            self.table.load(rows)
+            self.table.filter("")
+            self.status_var.set(f"جست‌وجو: {len(rows):,} گردش" if query else f"نمایش آخرین {len(rows):,} گردش")
+        except Exception as exc:
+            logger.exception("Historical transaction search failed")
+            messagebox.showerror("خطا در جست‌وجوی گردش‌ها", str(exc), parent=self)
 
     # -------------------------------------------------------------- products
 
@@ -1260,6 +1274,28 @@ class MainWindow(tk.Tk):
         return session_valid
 
     # --------------------------------------------------------------- reports
+
+    def _void_document_dialog(self) -> None:
+        """ابطال سند کامل با ثبت سند معکوس و علت."""
+        if not self._require_role("admin", action="ابطال سند"):
+            return
+        number = simpledialog.askstring("ابطال سند", "شماره سند:", parent=self)
+        if not number:
+            return
+        reason = simpledialog.askstring("علت ابطال", "علت ابطال را وارد کنید:", parent=self)
+        if not reason or not reason.strip():
+            messagebox.showwarning("علت الزامی است", "علت ابطال الزامی است.", parent=self)
+            return
+        if not messagebox.askyesno("تأیید", f"سند {number.strip()} ابطال شود؟", parent=self):
+            return
+        try:
+            reversal = self.ts.void_document(number, self.current_user["username"], reason)
+        except Exception as exc:
+            logger.exception("Document void failed")
+            messagebox.showerror("خطا", str(exc), parent=self)
+            return
+        messagebox.showinfo("انجام شد", f"سند معکوس {reversal} ثبت شد.", parent=self)
+        self.refresh()
 
     def _open_stock_adjustment(self) -> None:
         """ثبت شمارش فیزیکی و تعدیل قابل ردیابی موجودی."""
