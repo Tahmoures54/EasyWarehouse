@@ -247,11 +247,12 @@ class MainWindow(tk.Tk):
             head_right, text=f"نسخه {APP_VERSION}", style="Version.TLabel"
         ).pack(anchor="e")
         role_label = {"admin": "مدیر", "operator": "انباردار", "viewer": "مشاهده‌گر"}.get(self.current_user["role"], self.current_user["role"])
-        ttk.Label(
+        self.user_role_label = ttk.Label(
             head_right,
             text=f"کاربر: {self.current_user['display_name']}  |  نقش: {role_label}",
             style="Header.Subtitle.TLabel",
-        ).pack(anchor="e", pady=(4, 0))
+        )
+        self.user_role_label.pack(anchor="e", pady=(4, 0))
 
     def _build_metrics(self) -> None:
         metrics = ttk.Frame(self, padding=(16, 12, 16, 4))
@@ -1213,6 +1214,18 @@ class MainWindow(tk.Tk):
             self.current_user["role"] = "viewer"
         else:
             self.current_user["role"] = restored_user["role"]
+
+        # برچسب نقش هم باید با مجوزهای واقعی نشست همگام بماند.
+        role_label = {
+            "admin": "مدیر",
+            "operator": "انباردار",
+            "viewer": "مشاهده‌گر",
+        }.get(self.current_user["role"], self.current_user["role"])
+        if hasattr(self, "user_role_label"):
+            self.user_role_label.configure(
+                text=f"کاربر: {self.current_user['display_name']}  |  نقش: {role_label}"
+            )
+
         self.config(menu="")
         self._build_menu()
 
