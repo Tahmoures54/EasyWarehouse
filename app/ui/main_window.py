@@ -708,6 +708,11 @@ class MainWindow(tk.Tk):
 
         def reload_and_refresh() -> None:
             self._reload_product_tree(tree, search_var.get())
+            self.users.log_event(
+                self.current_user["username"],
+                "product_catalog_changed",
+                "فهرست کالاها تغییر کرد",
+            )
             self.refresh()
 
         def load() -> None:
