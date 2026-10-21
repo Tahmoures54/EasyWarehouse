@@ -318,7 +318,7 @@ class MainWindow(tk.Tk):
             win,
             self.ps,
             self.ts,
-            on_ok=self.refresh,
+            on_ok=self._after_transaction_saved,
             on_manage_products=self._list_products,
         )
         self.form.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
@@ -535,6 +535,15 @@ class MainWindow(tk.Tk):
             self.after(420, self._animate_logo)
         except tk.TclError:
             return
+
+    def _after_transaction_saved(self) -> None:
+        """ثبت موفقیت تراکنش در دفتر حسابرسی و تازه‌سازی داشبورد."""
+        self.users.log_event(
+            self.current_user["username"],
+            "inventory_transaction_saved",
+            "تراکنش انبار با موفقیت ثبت شد",
+        )
+        self.refresh()
 
     def _manage_users(self) -> None:
         """باز کردن مدیریت کاربران فقط برای مدیر."""
