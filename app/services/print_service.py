@@ -33,8 +33,12 @@ def build_voucher_html(tx, operator: str = "") -> str:
         shown_date = tx.date
 
     fields = [
-        ("شماره سند", f"EW-{int(tx.id):06d}"),
+        ("شماره سند", getattr(tx, "document_no", "") or f"EW-{int(tx.id):06d}"),
         ("تاریخ", shown_date),
+        ("طرف حساب / واحد", getattr(tx, "party_name", "") or "—"),
+        ("تحویل‌دهنده", getattr(tx, "delivered_by", "") or "—"),
+        ("تحویل‌گیرنده", getattr(tx, "received_by", "") or "—"),
+        ("شماره مرجع", getattr(tx, "reference_no", "") or "—"),
         ("نوع عملیات", tx.type_fa()),
         ("کد کالا", getattr(tx, "user_code", "") or tx.code),
         ("نام کالا", tx.name or "—"),
@@ -92,7 +96,9 @@ def print_transaction(tx, operator: str = "") -> Path:
     """ذخیره قالب چاپ در پوشه داده کاربر و بازکردن آن در مرورگر پیش‌فرض."""
     folder = get_db_path().parent / "printouts"
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / f"EW-{int(tx.id):06d}.html"
+    document_no = getattr(tx, "document_no", "") or f"EW-{int(tx.id):06d}"
+    safe_document_no = "".join(ch for ch in document_no if ch.isalnum() or ch in "-_")
+    path = folder / f"{safe_document_no or f'EW-{int(tx.id):06d}'}.html"
     path.write_text(build_voucher_html(tx, operator), encoding="utf-8")
     opened = webbrowser.open(path.resolve().as_uri())
     if not opened:
