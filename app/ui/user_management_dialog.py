@@ -135,6 +135,9 @@ class UserManagementDialog(tk.Toplevel):
         )
         if role is None:
             return
+        if self.tree.item(self.tree.selection()[0], "values")[0] == self.actor:
+            messagebox.showwarning("محدودیت", "تغییر نقش حساب مدیر جاری از داخل همان نشست مجاز نیست.", parent=self)
+            return
         try:
             self.users.set_role(item_id, role.strip(), self.actor)
             self.refresh()
