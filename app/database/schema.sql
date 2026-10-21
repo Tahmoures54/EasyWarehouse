@@ -81,7 +81,6 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_tx_code      ON transactions(code);
 CREATE INDEX IF NOT EXISTS idx_tx_date      ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_tx_code_date ON transactions(code, date DESC);
-CREATE INDEX IF NOT EXISTS idx_tx_document_id ON transactions(document_id);
 CREATE INDEX IF NOT EXISTS idx_doc_date ON warehouse_documents(date DESC);
 
 -- محصولات: جست‌وجوی نام (لیست کالاها)، تشخیص تکراری user_code، فیلتر دسته
