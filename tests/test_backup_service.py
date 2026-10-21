@@ -71,3 +71,30 @@ def test_restore_replace_failure_preserves_current_database(tmp_path, monkeypatc
 
     monkeypatch.setattr(backup_module.os, "replace", original_replace)
     assert ProductService(DB(path=current)).get("P001").name == "داده فعلی"
+
+def test_restore_rolls_back_if_installed_database_fails_final_validation(tmp_path, monkeypatch):
+    current = tmp_path / "anbar.db"
+    make_db(current, "داده فعلی")
+    service = BackupService(current)
+    saved = service.backup(tmp_path / "backups")
+    ProductService(DB(path=current)).add("داده جدید")
+
+    original_validate = service._validate_sqlite
+    calls = 0
+
+    def fail_final_validation(path):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            raise ValueError("simulated final validation failure")
+        return original_validate(path)
+
+    monkeypatch.setattr(service, "_validate_sqlite", fail_final_validation)
+    with pytest.raises(ValueError, match="final validation"):
+        service.restore(saved)
+
+    # دیتابیس قبلی باید بعد از شکست اعتبارسنجی نهایی برگردانده شود.
+    restored = ProductService(DB(path=current))
+    assert restored.count() == 2
+    assert restored.get("P001").name == "داده فعلی"
+
