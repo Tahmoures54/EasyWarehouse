@@ -11,6 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 from typing import Any, Callable, Optional
 
 from app.config import (
+    APP_BRAND,
     APP_GEOMETRY,
     APP_MIN_SIZE,
     APP_TITLE,
@@ -232,7 +233,7 @@ class MainWindow(tk.Tk):
         logo_line.pack(anchor="w")
         self.logo_led = tk.Canvas(logo_line, width=22, height=22, bg=T.HEADER_BG, highlightthickness=0, bd=0)
         self.logo_led.pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Label(logo_line, text="EasyWarehouse", style="Header.TLabel").pack(side=tk.LEFT)
+        ttk.Label(logo_line, text=APP_BRAND, style="Header.TLabel").pack(side=tk.LEFT)
         self._logo_pulse = 0
         self._animate_logo()
         ttk.Label(
@@ -956,7 +957,7 @@ class MainWindow(tk.Tk):
             parent=parent,
             title="ذخیره الگوی ورود کالا",
             defaultextension=".xlsx",
-            initialfile="easywarehouse-products-template.xlsx",
+            initialfile="anbardari-asan-products-template.xlsx",
             filetypes=[("فایل Excel", "*.xlsx")],
         )
         if not path:
