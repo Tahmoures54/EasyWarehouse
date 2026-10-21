@@ -371,6 +371,15 @@ class ReportService:
             raise ValueError("نوع گردش برای خروجی کاردکس معتبر نیست.")
         if transaction_type != "همه گردش‌ها":
             rows = [row for row in rows if row["type"] == "مانده ابتدای دوره" or row["type"] == transaction_type]
+
+        # گزارش کاردکس باید اعداد صحیح را بدون پسوند اعشاری نمایش دهد؛
+        # مقدارهای کسری همچنان با دقت اصلی حفظ می‌شوند.
+        for row in rows:
+            for key in ("incoming", "outgoing", "balance"):
+                value = row.get(key)
+                if isinstance(value, (int, float)) and float(value).is_integer():
+                    row[key] = int(value)
+
         return self.export_csv(
             path,
             rows,
