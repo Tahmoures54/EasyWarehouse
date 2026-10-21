@@ -49,7 +49,7 @@ class KardexWindow(tk.Toplevel):
         top.columnconfigure(1, weight=1)
 
         self.summary_var = tk.StringVar(value="کالا را انتخاب کنید. برای کل سابقه، تاریخ‌ها را خالی بگذارید.")
-        ttk.Label(self, textvariable=self.summary_var, padding=(14, 0, 14, 8)).pack(anchor="w")
+        ttk.Label(self, textvariable=self.summary_var, padding=(14, 0, 14, 8), justify=tk.LEFT).pack(anchor="w")
 
         body = ttk.Frame(self, padding=(12, 0, 12, 8))
         body.pack(fill=tk.BOTH, expand=True)
@@ -101,11 +101,20 @@ class KardexWindow(tk.Toplevel):
                     f'{row["balance"]:g}', row["unit"], row["note"]
                 ))
             product = self.ps.get(code)
-            final_balance = rows[-1]["balance"] if rows else 0.0
+            opening_row = next((row for row in rows if row["type"] == "مانده ابتدای دوره"), None)
+            opening_balance = opening_row["balance"] if opening_row else 0.0
+            movements = [row for row in rows if row["type"] != "مانده ابتدای دوره"]
+            total_in = sum(row["incoming"] for row in movements)
+            total_out = sum(row["outgoing"] for row in movements)
+            final_balance = rows[-1]["balance"] if rows else opening_balance
+            product_name = product.name if product else code
+            product_code = (product.user_code or product.code) if product else code
+            unit = product.unit if product else ""
             self.summary_var.set(
-                f"کالا: {product.name if product else code} | "
-                f"تعداد ردیف‌ها: {len(rows)} | مانده پایان گزارش: {final_balance:g} "
-                f"{product.unit if product else ''}"
+                f"کالا: {product_name}  |  کد: {product_code}  |  واحد: {unit}\n"
+                f"مانده ابتدای دوره: {opening_balance:g}  |  جمع ورود: {total_in:g}  |  "
+                f"جمع خروج: {total_out:g}  |  مانده پایان گزارش: {final_balance:g} {unit}\n"
+                f"تعداد گردش‌ها: {len(movements)}"
             )
         except Exception as exc:
             logger.exception("Kardex report failed")
