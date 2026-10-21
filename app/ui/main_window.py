@@ -162,6 +162,14 @@ class MainWindow(tk.Tk):
             command=self._export_transaction_report,
         )
         report_m.add_command(
+            label="گزارش کالاهای راکد با موجودی (CSV)...",
+            command=self._export_stale_inventory_report,
+        )
+        report_m.add_command(
+            label="برگه شمارش فیزیکی موجودی (CSV)...",
+            command=self._export_inventory_count_template,
+        )
+        report_m.add_command(
             label="کاردکس کالا...",
             command=self._open_kardex,
         )
@@ -1226,6 +1234,20 @@ class MainWindow(tk.Tk):
             "گزارش گردش تراکنش‌ها",
             "transactions.csv",
             lambda p: self.reports.export_transactions_csv(p),
+        )
+
+    def _export_stale_inventory_report(self) -> None:
+        self._save_report(
+            "گزارش کالاهای راکد با موجودی",
+            "stale-inventory.csv",
+            lambda p: self.reports.export_stale_inventory_csv(p, days=90),
+        )
+
+    def _export_inventory_count_template(self) -> None:
+        self._save_report(
+            "برگه شمارش فیزیکی موجودی",
+            "inventory-count.csv",
+            lambda p: self.reports.export_inventory_count_template_csv(p),
         )
 
     def _save_report(
