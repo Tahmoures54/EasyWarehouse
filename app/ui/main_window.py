@@ -49,7 +49,6 @@ class MainWindow(tk.Tk):
         self.minsize(*APP_MIN_SIZE)
         apply_theme(self)
         self._set_icon()
-        self.withdraw()
 
         self._help_win: Optional[HelpWindow] = None
         self._about_win: Optional[AboutWindow] = None
@@ -65,6 +64,7 @@ class MainWindow(tk.Tk):
             self.destroy()
             return
 
+        self.withdraw()
         from app.services.user_service import UserService
         from app.ui.login_dialog import LoginDialog
 
