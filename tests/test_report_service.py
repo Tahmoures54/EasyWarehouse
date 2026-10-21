@@ -126,3 +126,34 @@ def test_kardex_csv_filters_movement_type_but_keeps_opening_balance(tmp_path):
     assert [row["type"] for row in rows] == ["مانده ابتدای دوره", "خروج"]
     assert rows[0]["balance"] == "10"
     assert rows[1]["balance"] == "7"
+
+
+def test_stale_inventory_report_includes_only_positive_stock_older_than_threshold(tmp_path):
+    _, products, transactions, reports = _services(tmp_path)
+    stale = products.add("کالای راکد")
+    recent = products.add("کالای تازه")
+    empty = products.add("کالای ناموجود")
+    never_moved = products.add("کالای بدون گردش")
+    transactions.add(stale.code, "IN", 12, "2026-01-01")
+    transactions.add(recent.code, "IN", 5, "2026-10-01")
+    transactions.add(empty.code, "IN", 2, "2026-01-01")
+    transactions.add(empty.code, "OUT", 2, "2026-01-02")
+    rows = reports.stale_inventory_rows(days=90, as_of="2026-10-21")
+    by_name = {row["name"]: row for row in rows}
+    assert "کالای راکد" in by_name
+    assert by_name["کالای راکد"]["days_since_movement"] == 293
+    assert "کالای تازه" not in by_name
+    assert "کالای ناموجود" not in by_name
+    assert by_name["کالای بدون گردش"]["days_since_movement"] == "بدون گردش"
+
+
+def test_inventory_count_template_is_read_only_and_csv_exported(tmp_path):
+    _, products, transactions, reports = _services(tmp_path)
+    product = products.add("کالای شمارش", min_stock=2)
+    transactions.add(product.code, "IN", 7, "2026-10-01")
+    path = reports.export_inventory_count_template_csv(tmp_path / "count.csv")
+    rows = list(__import__("csv").DictReader(path.read_text(encoding="utf-8-sig").splitlines()))
+    assert rows[0]["system_stock"] == "7.0"
+    assert rows[0]["counted_stock"] == ""
+    assert rows[0]["variance"] == ""
+    assert products.get(product.code).stock == 7
