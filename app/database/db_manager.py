@@ -214,10 +214,11 @@ class DB:
                 CREATE TABLE products_new (
                     code TEXT PRIMARY KEY,
                     user_code TEXT NOT NULL DEFAULT '',
-                    name TEXT NOT NULL,
+                    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
                     unit TEXT NOT NULL DEFAULT 'عدد',
-                    min_stock REAL NOT NULL DEFAULT 0,
-                    category TEXT NOT NULL DEFAULT 'عمومی',
+                    min_stock REAL NOT NULL DEFAULT 0 CHECK (min_stock >= 0),
+                    category TEXT NOT NULL DEFAULT 'عمومی'
+                        CHECK (category IN ('مصرفی', 'تکنیکال', 'عمومی')),
                     shelf TEXT NOT NULL DEFAULT ''
                 )
                 """
@@ -233,10 +234,11 @@ class DB:
                 SELECT
                     code,
                     COALESCE(NULLIF({select_user_code}, ''), code),
-                    COALESCE(NULLIF(name, ''), code),
+                    COALESCE(NULLIF(trim(name), ''), code),
                     COALESCE(NULLIF(unit, ''), 'عدد'),
-                    COALESCE(min_stock, 0),
-                    COALESCE({select_category}, 'عمومی'),
+                    MAX(COALESCE(min_stock, 0), 0),
+                    CASE WHEN {select_category} IN ('مصرفی', 'تکنیکال', 'عمومی')
+                         THEN {select_category} ELSE 'عمومی' END,
                     COALESCE({select_shelf}, '')
                 FROM products
                 """
