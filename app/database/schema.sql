@@ -1,4 +1,4 @@
--- EasyWarehouse schema v2.0.0
+-- انبارداری آسان — schema v2.0.0
 -- نیازمند PRAGMA foreign_keys = ON (در DB._connect تنظیم می‌شود).
 -- این فایل با executescript اجرا می‌شود؛ در SQLite مدرن، اجرا اتمیک است.
 -- نسخه از طریق PRAGMA user_version در انتهای فایل تنظیم می‌شود.
