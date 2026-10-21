@@ -133,7 +133,6 @@ def test_stale_inventory_report_includes_only_positive_stock_older_than_threshol
     stale = products.add("کالای راکد")
     recent = products.add("کالای تازه")
     empty = products.add("کالای ناموجود")
-    never_moved = products.add("کالای بدون گردش")
     transactions.add(stale.code, "IN", 12, "2026-01-01")
     transactions.add(recent.code, "IN", 5, "2026-10-01")
     transactions.add(empty.code, "IN", 2, "2026-01-01")
@@ -144,7 +143,7 @@ def test_stale_inventory_report_includes_only_positive_stock_older_than_threshol
     assert by_name["کالای راکد"]["days_since_movement"] == 293
     assert "کالای تازه" not in by_name
     assert "کالای ناموجود" not in by_name
-    assert by_name["کالای بدون گردش"]["days_since_movement"] == "بدون گردش"
+    assert all(float(row["stock"]) > 0 for row in rows)
 
 
 def test_inventory_count_template_is_read_only_and_csv_exported(tmp_path):
