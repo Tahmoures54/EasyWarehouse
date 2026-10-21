@@ -170,6 +170,63 @@ def test_document_metadata_is_persisted_and_numbered(services):
     assert loaded.reference_no == "PO-1405-18"
 
 
+def test_multi_item_document_shares_number_and_persists_description(services):
+    ps, ts = services
+    first = ps.add("کالای اول")
+    second = ps.add("کالای دوم")
+    saved, warnings, document_no = ts.add_document(
+        [
+            {"code": first.code, "type": "IN", "qty": 5},
+            {"code": second.code, "type": "IN", "qty": 3},
+        ],
+        date_str="2026-10-21",
+        note="رسید خرید ماهانه",
+        party_name="تأمین‌کننده",
+        delivered_by="علی",
+        received_by="انباردار",
+        reference_no="PO-100",
+    )
+    assert not warnings
+    assert len(saved) == 2
+    assert {tx.document_no for tx in saved} == {document_no}
+    assert ps.get(first.code).stock == 5
+    assert ps.get(second.code).stock == 3
+    rows = ts.db.all(
+        "SELECT document_id, document_no, note FROM transactions ORDER BY id"
+    )
+    assert len({row["document_id"] for row in rows}) == 1
+    assert all(row["document_no"] == document_no for row in rows)
+    assert all(row["note"] == "رسید خرید ماهانه" for row in rows)
+
+
+def test_multi_item_document_is_atomic_when_one_line_fails(services):
+    ps, ts = services
+    first = ps.add("کالای موجود")
+    second = ps.add("کالای ناکافی")
+    ts.add(first.code, "IN", 4)
+    ts.add(second.code, "IN", 1)
+    before = ts.count()
+    with pytest.raises(ValueError, match="کل سند"):
+        ts.add_document([
+            {"code": first.code, "type": "OUT", "qty": 2},
+            {"code": second.code, "type": "OUT", "qty": 5},
+        ], allow_overdraw=False)
+    assert ts.count() == before
+    assert ps.get(first.code).stock == 4
+    assert ps.get(second.code).stock == 1
+
+
+def test_document_rejects_mixed_movement_types(services):
+    ps, ts = services
+    first = ps.add("کالای ورود")
+    second = ps.add("کالای خروج")
+    with pytest.raises(ValueError, match="نوع همه اقلام"):
+        ts.add_document([
+            {"code": first.code, "type": "IN", "qty": 1},
+            {"code": second.code, "type": "OUT", "qty": 1},
+        ])
+
+
 def test_jalali_date_round_trip():
     assert from_jalali("1405/07/29") == "2026-10-21"
     assert to_jalali("2026-10-21") == "1405/07/29"
