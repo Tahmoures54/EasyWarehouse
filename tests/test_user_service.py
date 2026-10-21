@@ -70,3 +70,15 @@ def test_audit_log_is_written(users):
     events = [row["event"] for row in users.recent_audit()]
     assert "first_admin_created" in events
     assert "login_success" in events
+
+
+def test_role_changes_are_audited_and_last_admin_is_protected(users):
+    users.setup_first_admin("owner", "مدیر", "SecurePass123")
+    users.create_user("operator1", "انباردار", "OperatorPass123", "operator", "owner")
+    operator = next(row for row in users.list_users() if row["username"] == "operator1")
+    users.set_role(operator["id"], "viewer", "owner")
+    assert next(row for row in users.list_users() if row["username"] == "operator1")["role"] == "viewer"
+    assert any(row["event"] == "user_role_changed" for row in users.recent_audit())
+    admin = next(row for row in users.list_users() if row["username"] == "owner")
+    with pytest.raises(AuthenticationError):
+        users.set_role(admin["id"], "viewer", "owner")
