@@ -78,7 +78,7 @@ def _setup_logging(verbose: bool = False) -> Optional[Path]:
     )
 
     try:
-        from app.config import APP_NAME, APP_VERSION
+        from app.config import APP_BRAND, APP_VERSION
 
         logger.info("=" * 60)
         logger.info("%s %s starting", APP_BRAND, APP_VERSION)
