@@ -49,16 +49,16 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
       - name: Build one-file EXE
-        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name EasyWarehouse --add-data "app/database/schema.sql;app/database" --add-data "assets;assets" app/main.py
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name AnbardariAsan --add-data "app/database/schema.sql;app/database" --add-data "assets;assets" app/main.py
       - name: Verify EXE exists and is non-empty
         shell: pwsh
         run: |
-          if (!(Test-Path "dist/EasyWarehouse.exe")) { throw "EXE was not created" }
-          if ((Get-Item "dist/EasyWarehouse.exe").Length -le 100000) { throw "EXE is unexpectedly small" }
-          Get-Item "dist/EasyWarehouse.exe" | Select-Object Name,Length
+          if (!(Test-Path "dist/AnbardariAsan.exe")) { throw "EXE was not created" }
+          if ((Get-Item "dist/AnbardariAsan.exe").Length -le 100000) { throw "EXE is unexpectedly small" }
+          Get-Item "dist/AnbardariAsan.exe" | Select-Object Name,Length
       - name: Upload Windows EXE
         uses: actions/upload-artifact@v4
         with:
-          name: EasyWarehouse-Windows-x64
-          path: dist/EasyWarehouse.exe
+          name: AnbardariAsan-Windows-x64
+          path: dist/AnbardariAsan.exe
           if-no-files-found: error
