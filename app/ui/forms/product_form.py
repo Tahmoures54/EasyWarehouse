@@ -28,6 +28,7 @@ class ProductForm(tk.Toplevel):
         service: ProductService,
         product: Optional[Product] = None,
         on_save: Optional[Callable[[], None]] = None,
+        initial_user_code: str = "",
     ) -> None:
         super().__init__(master)
         self.service = service
@@ -35,7 +36,7 @@ class ProductForm(tk.Toplevel):
         self.on_save = on_save
 
         # --- متغیرها ابتدا ساخته می‌شوند تا _save هرگز به متغیر نبوده برنخورد ---
-        self.user_code_var = tk.StringVar()
+        self.user_code_var = tk.StringVar(value=initial_user_code)
         self.name_var = tk.StringVar()
         self.unit_var = tk.StringVar(value="عدد")
         self.min_var = tk.StringVar(value="0")
