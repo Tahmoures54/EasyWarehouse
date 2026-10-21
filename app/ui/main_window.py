@@ -121,8 +121,10 @@ class MainWindow(tk.Tk):
         menubar.add_cascade(label="پرونده", menu=file_m)
 
         prod_m = tk.Menu(menubar, tearoff=0)
-        prod_m.add_command(label="کالای جدید", command=self._add_product)
-        prod_m.add_command(label="لیست کالاها", command=self._list_products)
+        prod_m.add_command(
+            label="فهرست و کدگذاری کالا",
+            command=self._list_products,
+        )
         menubar.add_cascade(label="کالاها", menu=prod_m)
 
         report_m = tk.Menu(menubar, tearoff=0)
