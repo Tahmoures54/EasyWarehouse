@@ -39,12 +39,20 @@ class Transaction:
     name: str = ""
     unit: str = ""
     user_code: str = ""
+    document_no: str = ""
+    party_name: str = ""
+    delivered_by: str = ""
+    received_by: str = ""
+    reference_no: str = ""
 
     # ------------------------------------------------------------ نرمال‌سازی
 
     def __post_init__(self) -> None:
         # نرمال‌سازی NULLهای legacy به رشتهٔ خالی
-        for field in ("note", "name", "unit", "user_code"):
+        for field in (
+            "note", "name", "unit", "user_code", "document_no",
+            "party_name", "delivered_by", "received_by", "reference_no",
+        ):
             if getattr(self, field) is None:
                 setattr(self, field, "")
 
@@ -155,4 +163,9 @@ class Transaction:
             name=get("name", ""),
             unit=get("unit", ""),
             user_code=get("user_code", ""),
+            document_no=get("document_no", ""),
+            party_name=get("party_name", ""),
+            delivered_by=get("delivered_by", ""),
+            received_by=get("received_by", ""),
+            reference_no=get("reference_no", ""),
         )

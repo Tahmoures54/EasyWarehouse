@@ -1,4 +1,4 @@
--- EasyWarehouse schema v2.0.0
+-- EasyWarehouse schema v3.0.0
 -- نیازمند PRAGMA foreign_keys = ON (در DB._connect تنظیم می‌شود).
 -- این فایل با executescript اجرا می‌شود؛ در SQLite مدرن، اجرا اتمیک است.
 -- نسخه از طریق PRAGMA user_version در انتهای فایل تنظیم می‌شود.
@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS transactions (
           CHECK (length(date) = 10
                  AND date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     note  TEXT DEFAULT '',
+    document_no TEXT NOT NULL DEFAULT '',
+    party_name TEXT NOT NULL DEFAULT '',
+    delivered_by TEXT NOT NULL DEFAULT '',
+    received_by TEXT NOT NULL DEFAULT '',
+    reference_no TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (code) REFERENCES products(code)
         ON DELETE RESTRICT
         ON UPDATE CASCADE
