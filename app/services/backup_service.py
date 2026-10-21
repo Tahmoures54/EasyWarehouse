@@ -257,9 +257,13 @@ class BackupService:
         )
         os.close(fd)
         temp_path = Path(temp_name)
-        shutil.copy2(backup_file, temp_path)
-        self._validate_sqlite(temp_path)
-        return temp_path, True
+        try:
+            shutil.copy2(backup_file, temp_path)
+            self._validate_sqlite(temp_path)
+            return temp_path, True
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
 
     def _handle_restore_failure(
         self,
@@ -269,10 +273,18 @@ class BackupService:
     ) -> None:
         temp_path.unlink(missing_ok=True)
 
-        # اگر دیتابیس فعلی وجود ندارد یا از محل اصلی جابه‌جا شده است،
-        # از کپی ایمنی (که کامل است) بازگردان.
+        # اگر نصب دیتابیس جدید انجام شده اما اعتبارسنجی نهایی شکست خورده،
+        # فایل نصب‌شده را کنار بگذار تا بتوانیم کپی ایمنی را برگردانیم.
+        # وجود displaced_path نشان می‌دهد دیتابیس اصلی از مسیر خود جابه‌جا شده بود.
         if self.db_path.exists():
-            return
+            if displaced_path is None or displaced_path.exists() is False:
+                return
+            try:
+                self.db_path.unlink()
+            except OSError as exc:
+                logger.exception("Removing failed restored DB failed: %s", exc)
+                return
+            self._remove_sidecars()
 
         # ابتدا سراغ safety (کامل) نه displaced (ممکن است WAL نداشته باشد)
         for source, label in (
