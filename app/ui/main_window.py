@@ -1177,7 +1177,7 @@ class MainWindow(tk.Tk):
             return
 
         try:
-            self._reload_after_restore()
+            session_valid = self._reload_after_restore()
         except Exception as exc:
             logger.exception("Reload after restore failed")
             messagebox.showerror(
@@ -1188,11 +1188,22 @@ class MainWindow(tk.Tk):
             )
             return
 
+        if not session_valid:
+            messagebox.showinfo(
+                "نیاز به ورود مجدد",
+                "حساب کاربری فعلی در دیتابیس بازیابی‌شده وجود ندارد یا غیرفعال است. "
+                "برای جلوگیری از ادامهٔ نشست با حساب نامعتبر، برنامه بسته می‌شود. "
+                "لطفاً دوباره اجرا و با حساب معتبر وارد شوید.",
+                parent=self,
+            )
+            self.destroy()
+            return
+
         messagebox.showinfo(
             "بازیابی", "بازیابی با موفقیت انجام شد.", parent=self
         )
 
-    def _reload_after_restore(self) -> None:
+    def _reload_after_restore(self) -> bool:
         """DB و سرویس‌ها را بازسازی می‌کند و UI را به آن‌ها وصل می‌کند."""
         old_db = getattr(self, "db", None)
         if old_db is not None:
@@ -1210,7 +1221,9 @@ class MainWindow(tk.Tk):
             "SELECT role, active FROM app_users WHERE username = ?",
             (self.current_user["username"],),
         )
-        if restored_user is None or not restored_user["active"]:
+        session_valid = restored_user is not None and bool(restored_user["active"])
+        if not session_valid:
+            # حساب حذف‌شده/غیرفعال نباید حتی با دسترسی مشاهده‌گر نشست فعالی داشته باشد.
             self.current_user["role"] = "viewer"
         else:
             self.current_user["role"] = restored_user["role"]
@@ -1243,6 +1256,7 @@ class MainWindow(tk.Tk):
         self._products_win = None
 
         self.refresh()
+        return session_valid
 
     # --------------------------------------------------------------- reports
 
