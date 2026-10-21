@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -138,6 +139,65 @@ class ReportService:
             })
         return result
 
+
+    def stale_inventory_rows(self, days: int = 90, as_of: Optional[str] = None) -> List[Dict[str, Any]]:
+        """کالاهای دارای موجودی مثبت که در بازه تعیین‌شده گردش نداشته‌اند."""
+        try:
+            threshold = int(days)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("تعداد روز باید عدد صحیح باشد.") from exc
+        if threshold < 1 or threshold > 36500:
+            raise ValueError("تعداد روز باید بین ۱ و ۳۶۵۰۰ باشد.")
+        try:
+            reference = date.fromisoformat(as_of) if as_of else date.today()
+        except ValueError as exc:
+            raise ValueError("تاریخ مبنا باید با قالب YYYY-MM-DD باشد.") from exc
+        result = []
+        for row in self.inventory_rows():
+            stock = float(row["stock"])
+            if stock <= 0:
+                continue
+            last = row["last_movement"]
+            if last:
+                try:
+                    movement_date = date.fromisoformat(last)
+                except ValueError:
+                    logger.warning("Ignoring invalid last movement date: %r", last)
+                    continue
+                age = (reference - movement_date).days
+                if age < threshold:
+                    continue
+            else:
+                age = None
+            result.append({
+                **row,
+                "days_since_movement": age if age is not None else "بدون گردش",
+            })
+        return result
+
+    def export_stale_inventory_csv(self, path: str | Path, days: int = 90, as_of: Optional[str] = None) -> Path:
+        return self.export_csv(
+            path,
+            self.stale_inventory_rows(days=days, as_of=as_of),
+            fieldnames=_INVENTORY_FIELDS + ("days_since_movement",),
+        )
+
+    def inventory_count_template_rows(self) -> List[Dict[str, Any]]:
+        """برگه شمارش فیزیکی؛ تهیه فایل به‌تنهایی هیچ موجودی را تغییر نمی‌دهد."""
+        return [{
+            "code": row["code"], "name": row["name"], "unit": row["unit"],
+            "category": row["category"], "shelf": row["shelf"],
+            "system_stock": row["stock"], "counted_stock": "",
+            "variance": "", "notes": "",
+        } for row in self.inventory_rows()]
+
+    def export_inventory_count_template_csv(self, path: str | Path) -> Path:
+        return self.export_csv(
+            path,
+            self.inventory_count_template_rows(),
+            fieldnames=("code", "name", "unit", "category", "shelf", "system_stock", "counted_stock", "variance", "notes"),
+        )
+
     # ---------------------------------------------------------- transactions
 
     def transaction_rows(
@@ -204,6 +264,127 @@ class ReportService:
             "quantity": float(row["qty"]),
             "note": row["note"] or "",
         } for row in rows]
+
+    # --------------------------------------------------------------- kardex
+
+    def kardex_rows(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """کاردکس کامل یک کالا با مانده قبل از بازه و مانده پس از هر گردش."""
+        from app.services.transaction_service import STOCK_CASE
+
+        value = str(code or "").strip()
+        if not value:
+            raise ValueError("کد کالا را برای تهیه کاردکس انتخاب کنید.")
+        start = validate_transaction_date(start_date) if start_date else None
+        end = validate_transaction_date(end_date) if end_date else None
+        if start and end and start > end:
+            raise ValueError("تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.")
+
+        product = self.db.one(
+            "SELECT code, user_code, name, unit FROM products "
+            "WHERE code = ? OR user_code = ? ORDER BY CASE WHEN code = ? THEN 0 ELSE 1 END LIMIT 1",
+            (value, value, value),
+        )
+        if not product:
+            raise ValueError(f"کالایی با کد «{value}» یافت نشد.")
+        internal_code = product["code"]
+
+        opening = 0.0
+        if start:
+            row = self.db.one(
+                f"""SELECT COALESCE(SUM({STOCK_CASE}), 0) AS stock
+                    FROM transactions t WHERE t.code = ? AND t.date < ?""",
+                (internal_code, start),
+            )
+            opening = float(row["stock"] or 0)
+
+        clauses = ["t.code = ?"]
+        params: list[Any] = [internal_code]
+        if start:
+            clauses.append("t.date >= ?")
+            params.append(start)
+        if end:
+            clauses.append("t.date <= ?")
+            params.append(end)
+
+        transactions = self.db.all(
+            f"""SELECT t.id, t.date, t.type, t.qty, t.note
+                FROM transactions t WHERE {" AND ".join(clauses)}
+                ORDER BY t.date ASC, t.id ASC""",
+            tuple(params),
+        )
+
+        balance = opening
+        rows: List[Dict[str, Any]] = []
+        for tx in transactions:
+            qty = float(tx["qty"])
+            tx_type = tx["type"]
+            incoming = qty if tx_type in ("IN", "RETURN") else 0.0
+            outgoing = qty if tx_type == "OUT" else 0.0
+            balance += incoming - outgoing
+            rows.append({
+                "id": int(tx["id"]),
+                "document_no": f"EW-{int(tx['id']):06d}",
+                "date": tx["date"],
+                "code": product["user_code"] or internal_code,
+                "name": product["name"] or "",
+                "type": _TYPE_LABELS.get(tx_type, tx_type or ""),
+                "incoming": incoming,
+                "outgoing": outgoing,
+                "balance": balance,
+                "unit": product["unit"] or "",
+                "note": tx["note"] or "",
+            })
+
+        # یک ردیف افتتاحیه باعث می‌شود موجودی ابتدای بازه و تراز قابل فهم باشد.
+        if start:
+            rows.insert(0, {
+                "id": "",
+                "document_no": "",
+                "date": start,
+                "code": product["user_code"] or internal_code,
+                "name": product["name"] or "",
+                "type": "مانده ابتدای دوره",
+                "incoming": 0.0,
+                "outgoing": 0.0,
+                "balance": opening,
+                "unit": product["unit"] or "",
+                "note": "مانده محاسبه‌شده از تمام گردش‌های پیش از شروع بازه",
+            })
+        return rows
+
+    def export_kardex_csv(
+        self,
+        path: str | Path,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        transaction_type: str = "همه گردش‌ها",
+    ) -> Path:
+        rows = self.kardex_rows(code, start_date, end_date)
+        allowed_types = {"همه گردش‌ها", "ورود", "خروج", "عودت"}
+        if transaction_type not in allowed_types:
+            raise ValueError("نوع گردش برای خروجی کاردکس معتبر نیست.")
+        if transaction_type != "همه گردش‌ها":
+            rows = [row for row in rows if row["type"] == "مانده ابتدای دوره" or row["type"] == transaction_type]
+
+        # گزارش کاردکس باید اعداد صحیح را بدون پسوند اعشاری نمایش دهد؛
+        # مقدارهای کسری همچنان با دقت اصلی حفظ می‌شوند.
+        for row in rows:
+            for key in ("incoming", "outgoing", "balance"):
+                value = row.get(key)
+                if isinstance(value, (int, float)) and float(value).is_integer():
+                    row[key] = int(value)
+
+        return self.export_csv(
+            path,
+            rows,
+            fieldnames=("id", "document_no", "date", "code", "name", "type", "incoming", "outgoing", "balance", "unit", "note"),
+        )
 
     # ---------------------------------------------------------------- CSV
 

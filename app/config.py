@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 APP_NAME: Final = "EasyWarehouse"
 APP_TITLE: Final = "EasyWarehouse - مدیریت انبار"
-APP_VERSION: Final = "1.1.0"
+APP_VERSION: Final = "1.2.0"
 APP_AUTHOR: Final = "Tahmoures54"
 APP_LICENSE: Final = "MIT"
 GITHUB_URL: Final = "https://github.com/Tahmoures54/EasyWarehouse"

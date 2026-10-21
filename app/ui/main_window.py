@@ -21,6 +21,7 @@ from app.config import (
 from app.database.db_manager import DB, DatabaseError
 from app.services.backup_service import BackupService
 from app.services.product_service import ProductService
+from app.services.print_service import print_transaction
 from app.services.report_service import ReportService
 from app.services.transaction_service import TransactionService
 from app.ui import theme as T
@@ -159,6 +160,27 @@ class MainWindow(tk.Tk):
         report_m.add_command(
             label="گزارش گردش تراکنش‌ها (CSV)...",
             command=self._export_transaction_report,
+        )
+        report_m.add_command(
+            label="گزارش کالاهای راکد با موجودی (CSV)...",
+            command=self._export_stale_inventory_report,
+        )
+        report_m.add_command(
+            label="برگه شمارش فیزیکی موجودی (CSV)...",
+            command=self._export_inventory_count_template,
+        )
+        report_m.add_command(
+            label="ثبت شمارش و تعدیل موجودی...",
+            command=self._open_stock_adjustment,
+        )
+        report_m.add_command(
+            label="کاردکس کالا...",
+            command=self._open_kardex,
+        )
+        report_m.add_separator()
+        report_m.add_command(
+            label="چاپ رسید / حواله گردش انتخاب‌شده...",
+            command=self._print_selected_transaction,
         )
         menubar.add_cascade(label="گزارش‌ها", menu=report_m)
 
@@ -381,6 +403,12 @@ class MainWindow(tk.Tk):
 
         table_actions = ttk.Frame(left)
         table_actions.pack(fill=tk.X, pady=(8, 0))
+        ttk.Button(
+            table_actions,
+            text="چاپ رسید / حواله",
+            style="Primary.TButton",
+            command=self._print_selected_transaction,
+        ).pack(side=tk.LEFT, padx=(0, 6))
         ttk.Button(
             table_actions,
             text="حذف گردش انتخاب‌شده",
@@ -1025,6 +1053,42 @@ class MainWindow(tk.Tk):
 
     # ----------------------------------------------------------- transactions
 
+    def _print_selected_transaction(self) -> None:
+        """چاپ رسید ورود/عودت یا حواله خروج برای گردش انتخاب‌شده."""
+        tid = self.table.selected_id()
+        if tid is None:
+            messagebox.showwarning(
+                "انتخاب گردش",
+                "ابتدا یک گردش را از جدول انتخاب کنید.",
+                parent=self,
+            )
+            return
+        try:
+            tx = self.ts.get(tid)
+            if tx is None:
+                messagebox.showerror(
+                    "گردش یافت نشد",
+                    "رکورد انتخاب‌شده دیگر در دیتابیس وجود ندارد؛ جدول را تازه کنید.",
+                    parent=self,
+                )
+                return
+            path = print_transaction(tx, self.current_user.get("display_name", ""))
+            self.users.log_event(
+                self.current_user["username"],
+                "inventory_voucher_printed",
+                f"چاپ سند EW-{int(tx.id):06d} نوع {tx.type}",
+            )
+            messagebox.showinfo(
+                "سند آماده چاپ است",
+                "سند در مرورگر پیش‌فرض باز شد و پنجره چاپ باید نمایش داده شود.\n"
+                "برای چاپ کاغذی، چاپگر را انتخاب کنید؛ برای فایل، گزینه Save as PDF را بزنید.\n\n"
+                f"نسخه HTML نیز ذخیره شد:\n{path}",
+                parent=self,
+            )
+        except Exception as exc:
+            logger.exception("Transaction voucher printing failed")
+            messagebox.showerror("خطا در چاپ سند", str(exc), parent=self)
+
     def _del_tx(self) -> None:
         if not self._require_role("admin", action="حذف گردش"):
             return
@@ -1149,6 +1213,19 @@ class MainWindow(tk.Tk):
 
     # --------------------------------------------------------------- reports
 
+    def _open_stock_adjustment(self) -> None:
+        """ثبت شمارش فیزیکی و تعدیل قابل ردیابی موجودی."""
+        if not self._require_role("admin", "operator", action="ثبت تعدیل موجودی"):
+            return
+        from app.ui.stock_adjustment_dialog import StockAdjustmentDialog
+        StockAdjustmentDialog(self, self.ps, self.db, self.current_user, on_saved=self.refresh)
+
+    def _open_kardex(self) -> None:
+        """نمایش گردش کامل و مانده تجمعی یک کالا."""
+        from app.ui.kardex_window import KardexWindow
+
+        KardexWindow(self, self.ps, self.reports)
+
     def _export_inventory_report(self) -> None:
         self._save_report(
             "گزارش موجودی",
@@ -1168,6 +1245,20 @@ class MainWindow(tk.Tk):
             "گزارش گردش تراکنش‌ها",
             "transactions.csv",
             lambda p: self.reports.export_transactions_csv(p),
+        )
+
+    def _export_stale_inventory_report(self) -> None:
+        self._save_report(
+            "گزارش کالاهای راکد با موجودی",
+            "stale-inventory.csv",
+            lambda p: self.reports.export_stale_inventory_csv(p, days=90),
+        )
+
+    def _export_inventory_count_template(self) -> None:
+        self._save_report(
+            "برگه شمارش فیزیکی موجودی",
+            "inventory-count.csv",
+            lambda p: self.reports.export_inventory_count_template_csv(p),
         )
 
     def _save_report(
