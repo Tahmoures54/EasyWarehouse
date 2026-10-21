@@ -118,14 +118,6 @@ def build_document_html(items, operator: str = "") -> str:
         field("توضیحات", getattr(first, "note", "")),
         field("ثبت‌کننده", operator),
     ])
-    lines = []
-    for index, tx in enumerate(items, 1):
-        lines.append(
-            "<tr>" + "".join(_safe(v) for v in (
-                index, getattr(tx, "user_code", "") or tx.code,
-                tx.name or "—", tx.type_fa(), f"{tx.qty:g} {tx.unit or ''}".strip()
-            )) .replace("&lt;", "&lt;") + "</tr>"
-        )
     line_rows = "\n".join(
         "<tr>" + "".join(f"<td>{_safe(v)}</td>" for v in (
             i, getattr(tx, "user_code", "") or tx.code, tx.name or "—",
