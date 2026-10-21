@@ -1,6 +1,6 @@
 @echo off
 setlocal
-REM Build EasyWarehouse.exe on Windows. Stop immediately if any step fails.
+REM Build AnbardariAsan.exe on Windows. Stop immediately if any step fails.
 cd /d "%~dp0.."
 if errorlevel 1 exit /b 1
 
@@ -14,16 +14,16 @@ if errorlevel 1 exit /b 1
 python -m pip install -r requirements.txt
 if errorlevel 1 exit /b 1
 
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name EasyWarehouse ^
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name AnbardariAsan ^
   --add-data "app\database\schema.sql;app\database" ^
   --add-data "assets;assets" ^
   app\main.py
 if errorlevel 1 exit /b 1
-if not exist "dist\EasyWarehouse.exe" (
-  echo ERROR: dist\EasyWarehouse.exe was not created.
+if not exist "dist\AnbardariAsan.exe" (
+  echo ERROR: dist\AnbardariAsan.exe was not created.
   exit /b 1
 )
 
 echo.
-echo Build successful: %CD%\dist\EasyWarehouse.exe
+echo Build successful: %CD%\dist\AnbardariAsan.exe
 exit /b 0
