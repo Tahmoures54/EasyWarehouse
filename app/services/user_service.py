@@ -194,6 +194,24 @@ class UserService:
         except sqlite3.IntegrityError as exc:
             raise AuthenticationError("این نام کاربری قبلاً ثبت شده است.") from exc
 
+    def set_role(self, user_id: int, role: str, actor: str) -> None:
+        if role not in _ROLES:
+            raise AuthenticationError("نقش انتخاب‌شده معتبر نیست.")
+        with self.db.transaction() as conn:
+            target = conn.execute(
+                "SELECT username, role, active FROM app_users WHERE id=?", (user_id,)
+            ).fetchone()
+            if target is None:
+                raise AuthenticationError("کاربر پیدا نشد.")
+            if target["role"] == "admin" and target["active"] and role != "admin":
+                admins = conn.execute(
+                    "SELECT COUNT(*) FROM app_users WHERE role='admin' AND active=1"
+                ).fetchone()[0]
+                if admins <= 1:
+                    raise AuthenticationError("تغییر نقش آخرین مدیر فعال مجاز نیست.")
+            conn.execute("UPDATE app_users SET role=? WHERE id=?", (role, user_id))
+            self._audit(conn, actor, "user_role_changed", f"{target['username']}: {target['role']} -> {role}")
+
     def set_active(self, user_id: int, active: bool, actor: str) -> None:
         with self.db.transaction() as conn:
             target = conn.execute(
