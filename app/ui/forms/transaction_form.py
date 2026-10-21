@@ -138,7 +138,7 @@ class TransactionForm(ttk.LabelFrame):
         self._qty_entry.grid(
             row=1, column=0, sticky="ew", padx=(8, 0), ipady=4, pady=(0, 10)
         )
-        self._qty_entry.bind("<Return>", lambda _e: self._submit())
+        self._qty_entry.bind("<Return>", lambda _e: self._add_line())
 
         self.date_var = tk.StringVar(value=today_jalali())
         self._date_entry = ttk.Entry(
