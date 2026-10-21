@@ -56,7 +56,6 @@ class ProductForm(tk.Toplevel):
     def _configure_window(self, master: tk.Misc) -> None:
         self.title("ویرایش کالا" if self.product else "کالای جدید")
         self.resizable(True, True)
-        self.minsize(self.MIN_WIDTH, self.MIN_HEIGHT)
         self.configure(bg=T.BG)
         self.transient(master)
         self._center_on(master)
@@ -70,12 +69,15 @@ class ProductForm(tk.Toplevel):
         except tk.TclError:
             mx = my = mw = mh = 0
 
-        screen_w = max(self.winfo_screenwidth(), self.MIN_WIDTH)
-        screen_h = max(self.winfo_screenheight(), self.MIN_HEIGHT)
-        width = min(self.WIDTH, screen_w - 24)
-        height = min(self.HEIGHT, screen_h - 80)
-        width = max(min(width, screen_w), min(self.MIN_WIDTH, screen_w))
-        height = max(min(height, screen_h), min(self.MIN_HEIGHT, screen_h))
+        screen_w = max(self.winfo_screenwidth(), 1)
+        screen_h = max(self.winfo_screenheight(), 1)
+        available_w = max(screen_w - 24, 1)
+        available_h = max(screen_h - 80, 1)
+        min_w = min(self.MIN_WIDTH, available_w)
+        min_h = min(self.MIN_HEIGHT, available_h)
+        self.minsize(min_w, min_h)
+        width = max(min(self.WIDTH, available_w), min_w)
+        height = max(min(self.HEIGHT, available_h), min_h)
 
         if mw <= 1 or mh <= 1:  # والد هنوز نگاشت نشده — مرکز صفحه
             x = (screen_w - width) // 2
