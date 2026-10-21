@@ -18,6 +18,7 @@ from app.services.transaction_service import (
     validate_transaction_date,
 )
 from app.ui import theme as T
+from app.utils.date_utils import from_jalali, today_jalali
 
 logger = logging.getLogger(__name__)
 
@@ -80,10 +81,10 @@ class TransactionForm(ttk.LabelFrame):
         self._qty_entry.grid(row=3, column=1, sticky="w", pady=4)
         self._qty_entry.bind("<Return>", lambda _e: self._submit())
 
-        ttk.Label(self, text="تاریخ (YYYY-MM-DD):").grid(
+        ttk.Label(self, text="تاریخ خورشیدی (سال/ماه/روز):").grid(
             row=4, column=0, sticky="e", padx=4, pady=4
         )
-        self.date_var = tk.StringVar(value=date.today().isoformat())
+        self.date_var = tk.StringVar(value=today_jalali())
         self._date_entry = ttk.Entry(self, textvariable=self.date_var, width=14)
         self._date_entry.grid(row=4, column=1, sticky="w", pady=4)
         self._date_entry.bind("<Return>", lambda _e: self._submit())
@@ -166,7 +167,7 @@ class TransactionForm(ttk.LabelFrame):
 
         try:
             qty = parse_positive_qty(self.qty_var.get())
-            tx_date = validate_transaction_date(self.date_var.get())
+            tx_date = validate_transaction_date(from_jalali(self.date_var.get()))
         except ValueError as exc:
             self._show_error(str(exc))
             return
@@ -205,7 +206,7 @@ class TransactionForm(ttk.LabelFrame):
         self.prod_var.set("")
         self.qty_var.set("")
         self.note_var.set("")
-        self.date_var.set(date.today().isoformat())
+        self.date_var.set(today_jalali())
         if not preserve_type:
             self.type_var.set(next(iter(TYPES), "IN"))
         self._show_empty_info()
