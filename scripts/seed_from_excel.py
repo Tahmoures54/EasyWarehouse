@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-ورود داده از فایل اکسل انبار به EasyWarehouse
+ورود داده از فایل اکسل انبار به انبارداری آسان
   python scripts/seed_from_excel.py [مسیر_اکسل]
 """
 import sys
