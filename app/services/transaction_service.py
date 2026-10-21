@@ -270,6 +270,9 @@ class TransactionService:
                 raise ValueError("مقدار هر قلم باید عددی متناهی و بزرگ‌تر از صفر باشد.")
             normalized.append((code, kind, qty))
 
+        if len({kind for _, kind, _ in normalized}) != 1:
+            raise ValueError("در هر سند، نوع همه اقلام باید یکسان باشد.")
+
         saved: list[Transaction] = []
         warnings: list[str] = []
         with self.db.transaction() as conn:
@@ -443,6 +446,23 @@ class TransactionService:
             (tx_id,),
         )
         return self._row_to_transaction(row) if row else None
+
+    def document_lines(self, tx_id: int) -> List[Transaction]:
+        """همه اقلام سند متعلق به گردش انتخاب‌شده را برمی‌گرداند."""
+        tx = self.get(tx_id)
+        if tx is None:
+            return []
+        row = self.db.one("SELECT document_id FROM transactions WHERE id = ?", (tx_id,))
+        if row and row["document_id"] is not None:
+            rows = self.db.all(
+                """SELECT t.*, p.name, p.unit, p.user_code
+                   FROM transactions t LEFT JOIN products p ON p.code=t.code
+                   WHERE t.document_id = ?
+                   ORDER BY t.id""",
+                (row["document_id"],),
+            )
+            return [self._row_to_transaction(item) for item in rows]
+        return [tx]
 
     def count(self) -> int:
         row = self.db.one("SELECT COUNT(*) AS c FROM transactions")
