@@ -248,15 +248,15 @@ class MainWindow(tk.Tk):
         ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
         ttk.Button(
             quick,
-            text="⇩  خروجی گزارش موجودی",
-            style="Secondary.TButton",
-            command=self._export_inventory_report,
-        ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
-        ttk.Button(
-            quick,
             text="↔  ثبت تراکنش انبار",
             style="Primary.TButton",
             command=self._open_transaction_form,
+        ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
+        ttk.Button(
+            quick,
+            text="⇩  خروجی گزارش موجودی",
+            style="Secondary.TButton",
+            command=self._export_inventory_report,
         ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
         ttk.Label(
             quick, text="جست‌وجوی گردش‌ها: Ctrl+F", style="Muted.TLabel"
@@ -281,7 +281,11 @@ class MainWindow(tk.Tk):
         win.protocol("WM_DELETE_WINDOW", self._close_transaction_form)
 
         self.form = TransactionForm(
-            win, self.ps, self.ts, on_ok=self.refresh
+            win,
+            self.ps,
+            self.ts,
+            on_ok=self.refresh,
+            on_manage_products=self._list_products,
         )
         self.form.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
         self.form.refresh(None)
