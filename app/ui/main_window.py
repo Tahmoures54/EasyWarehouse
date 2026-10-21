@@ -49,6 +49,7 @@ class MainWindow(tk.Tk):
         self.minsize(*APP_MIN_SIZE)
         apply_theme(self)
         self._set_icon()
+        self.withdraw()
 
         self._help_win: Optional[HelpWindow] = None
         self._about_win: Optional[AboutWindow] = None
@@ -64,10 +65,28 @@ class MainWindow(tk.Tk):
             self.destroy()
             return
 
+        from app.services.user_service import UserService
+        from app.ui.login_dialog import LoginDialog
+
+        try:
+            self.users = UserService(self.db)
+            login = LoginDialog(self, self.users)
+            self.wait_window(login)
+            if login.user is None:
+                self.destroy()
+                return
+            self.current_user = login.user
+        except Exception as exc:
+            logger.exception("Authentication initialization failed")
+            messagebox.showerror("خطای ورود", str(exc), parent=self)
+            self.destroy()
+            return
+
         self._init_services()
         self._build_menu()
         self._build_ui()
         self._bind_shortcuts()
+        self.deiconify()
         self.refresh()
 
     # ------------------------------------------------------------------ setup
@@ -155,6 +174,11 @@ class MainWindow(tk.Tk):
         help_m.add_command(label="درباره برنامه", command=self._about)
         menubar.add_cascade(label="راهنما", menu=help_m)
 
+        if self.current_user["role"] == "admin":
+            users_m = tk.Menu(menubar, tearoff=0)
+            users_m.add_command(label="مدیریت کاربران و گزارش امنیتی...", command=self._manage_users)
+            menubar.add_cascade(label="مدیریت", menu=users_m)
+
         self.config(menu=menubar)
 
     # --------------------------------------------------------------------- ui
@@ -175,9 +199,13 @@ class MainWindow(tk.Tk):
 
         title_box = ttk.Frame(header, style="Header.TFrame")
         title_box.grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            title_box, text="EasyWarehouse", style="Header.TLabel"
-        ).pack(anchor="w")
+        logo_line = ttk.Frame(title_box, style="Header.TFrame")
+        logo_line.pack(anchor="w")
+        self.logo_led = tk.Canvas(logo_line, width=22, height=22, bg=T.HEADER_BG, highlightthickness=0, bd=0)
+        self.logo_led.pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(logo_line, text="EasyWarehouse", style="Header.TLabel").pack(side=tk.LEFT)
+        self._logo_pulse = 0
+        self._animate_logo()
         ttk.Label(
             title_box,
             text="مرکز کنترل موجودی و گردش کالا",
@@ -189,8 +217,11 @@ class MainWindow(tk.Tk):
         ttk.Label(
             head_right, text=f"نسخه {APP_VERSION}", style="Version.TLabel"
         ).pack(anchor="e")
+        role_label = {"admin": "مدیر", "operator": "انباردار", "viewer": "مشاهده‌گر"}.get(self.current_user["role"], self.current_user["role"])
         ttk.Label(
-            head_right, text="داشبورد انبار", style="Header.Subtitle.TLabel"
+            head_right,
+            text=f"کاربر: {self.current_user['display_name']}  |  نقش: {role_label}",
+            style="Header.Subtitle.TLabel",
         ).pack(anchor="e", pady=(4, 0))
 
     def _build_metrics(self) -> None:
@@ -265,6 +296,8 @@ class MainWindow(tk.Tk):
 
     def _open_transaction_form(self) -> None:
         """فرم ثبت تراکنش را در یک پنجره مستقل باز می‌کند."""
+        if not self._require_role("admin", "operator", action="ثبت تراکنش"):
+            return
         if self._win_alive(self._transaction_win):
             self._transaction_win.lift()
             self._transaction_win.focus_force()
@@ -489,6 +522,35 @@ class MainWindow(tk.Tk):
         except Exception:
             logger.exception("Could not open developer contact link")
 
+    def _animate_logo(self) -> None:
+        """نشانگر تپندهٔ کنار لوگو؛ جلوه‌ای بصری و مستقل از وضعیت دیتابیس."""
+        try:
+            if not self.winfo_exists() or not hasattr(self, "logo_led"):
+                return
+            self.logo_led.delete("all")
+            radius = 5 + (self._logo_pulse % 3)
+            color = "#4DD0E1" if self._logo_pulse % 2 == 0 else "#80DEEA"
+            self.logo_led.create_oval(11-radius, 11-radius, 11+radius, 11+radius, fill=color, outline=color)
+            self._logo_pulse += 1
+            self.after(420, self._animate_logo)
+        except tk.TclError:
+            return
+
+    def _manage_users(self) -> None:
+        """باز کردن مدیریت کاربران فقط برای مدیر."""
+        if not self._require_role("admin", action="مدیریت کاربران"):
+            return
+        from app.ui.user_management_dialog import UserManagementDialog
+        UserManagementDialog(self, self.users, self.current_user["username"])
+
+    def _require_role(self, *roles: str, action: str = "این عملیات") -> bool:
+        """کنترل نقش در نقطهٔ اجرای عملیات، نه فقط پنهان‌کردن دکمه."""
+        if self.current_user["role"] in roles:
+            return True
+        messagebox.showwarning("دسترسی محدود", f"نقش فعلی شما اجازهٔ انجام «{action}» را ندارد.", parent=self)
+        self.users.log_event(self.current_user["username"], "permission_denied", action)
+        return False
+
     # --------------------------------------------------------------- shortcuts
 
     def _focus_transaction_search(self, _event=None) -> str:
@@ -589,6 +651,8 @@ class MainWindow(tk.Tk):
     # -------------------------------------------------------------- products
 
     def _add_product(self) -> None:
+        if not self._require_role("admin", "operator", action="ثبت کالا"):
+            return
         ProductForm(self, self.ps, on_save=self.refresh)
 
     def _list_products(self) -> None:
@@ -940,6 +1004,8 @@ class MainWindow(tk.Tk):
     # ----------------------------------------------------------- transactions
 
     def _del_tx(self) -> None:
+        if not self._require_role("admin", action="حذف گردش"):
+            return
         tid = self.table.selected_id()
         if tid is None:
             messagebox.showwarning(
@@ -973,6 +1039,8 @@ class MainWindow(tk.Tk):
     # ---------------------------------------------------------------- backup
 
     def _do_backup(self) -> None:
+        if not self._require_role("admin", action="پشتیبان‌گیری"):
+            return
         dest = filedialog.askdirectory(
             title="انتخاب پوشه پشتیبان", parent=self
         )
@@ -988,6 +1056,8 @@ class MainWindow(tk.Tk):
             messagebox.showerror("خطا", str(exc), parent=self)
 
     def _do_restore(self) -> None:
+        if not self._require_role("admin", action="بازیابی دیتابیس"):
+            return
         path = filedialog.askopenfilename(
             parent=self,
             title="انتخاب فایل پشتیبان",
