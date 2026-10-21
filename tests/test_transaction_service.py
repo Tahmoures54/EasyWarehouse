@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT))
 from app.database.db_manager import DB
 from app.services.product_service import ProductService
 from app.services.transaction_service import TransactionService, parse_positive_qty
+from app.utils.date_utils import from_jalali, to_jalali, today_jalali
 
 
 @pytest.fixture
@@ -149,3 +150,16 @@ def test_foreign_keys_are_enabled_for_every_connection(services):
                 "INSERT INTO transactions (code, type, qty, date) VALUES (?, ?, ?, ?)",
                 ("MISSING", "IN", 1, "2026-10-19"),
             )
+
+
+def test_jalali_date_round_trip():
+    assert from_jalali("1405/07/29") == "2026-10-21"
+    assert to_jalali("2026-10-21") == "1405/07/29"
+    assert from_jalali("۱۴۰۵/۰۷/۲۹") == "2026-10-21"
+    assert today_jalali() == to_jalali(__import__("datetime").date.today().isoformat())
+
+
+def test_invalid_jalali_date_rejected():
+    for value in ("1405/13/01", "1405/12/30", "1405/07/xx", ""):
+        with pytest.raises(ValueError):
+            from_jalali(value)
