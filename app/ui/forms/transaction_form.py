@@ -303,6 +303,9 @@ class TransactionForm(ttk.LabelFrame):
         if product is None:
             self._show_error("کالای انتخاب‌شده دیگر در فهرست وجود ندارد.")
             return
+        if self._items and self._items[0]["type"] != self.type_var.get():
+            self._show_error("نوع سند را نمی‌توان پس از افزودن قلم تغییر داد؛ ابتدا اقلام را پاک کنید.")
+            return
         self._items.append({
             "code": code, "name": product.name, "unit": product.unit,
             "type": self.type_var.get(), "qty": qty,
