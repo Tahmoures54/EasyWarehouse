@@ -6,7 +6,6 @@ from __future__ import annotations
 import logging
 import tkinter as tk
 from tkinter import ttk, messagebox
-from datetime import date
 from typing import Callable, Optional
 
 from app.config import TYPES
