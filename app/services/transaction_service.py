@@ -505,8 +505,9 @@ class TransactionService:
         end_date: Optional[str] = None,
         code: Optional[str] = None,
         limit: int = 500,
+        query: Optional[str] = None,
     ) -> List[Transaction]:
-        """جست‌وجوی سابقهٔ تراکنش‌ها با فیلتر تاریخ و کد."""
+        """جست‌وجوی سابقهٔ تراکنش‌ها با فیلتر تاریخ، کد و متن آزاد."""
         start = validate_transaction_date(start_date) if start_date else None
         end = validate_transaction_date(end_date) if end_date else None
         if start and end and start > end:
@@ -525,6 +526,15 @@ class TransactionService:
             if value:
                 clauses.append("(t.code = ? OR p.user_code = ?)")
                 params.extend([value, value])
+        if query and str(query).strip():
+            needle = "%" + str(query).strip() + "%"
+            clauses.append("""(
+                CAST(t.id AS TEXT) LIKE ? OR t.date LIKE ? OR t.code LIKE ?
+                OR COALESCE(p.user_code, '') LIKE ? OR COALESCE(p.name, '') LIKE ?
+                OR COALESCE(t.note, '') LIKE ? OR COALESCE(t.document_no, '') LIKE ?
+                OR COALESCE(t.party_name, '') LIKE ? OR COALESCE(t.reference_no, '') LIKE ?
+            )""")
+            params.extend([needle] * 9)
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
         if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
