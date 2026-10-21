@@ -1,6 +1,6 @@
-# EasyWarehouse
+# انبارداری آسان
 
-برنامه دسکتاپ مدیریت انبار با Python/Tkinter و SQLite. نسخه کد فعلی: **1.2.0**. مخزن: https://github.com/Tahmoures54/EasyWarehouse
+برنامه دسکتاپ «انبارداری آسان» برای مدیریت کالا و گردش انبار، با Python/Tkinter و SQLite. نسخه کد فعلی: **1.2.0**. مخزن: https://github.com/Tahmoures54/EasyWarehouse
 
 > وضعیت انتشار: وجود سورس و workflow به‌تنهایی به معنی تأیید پروداکشن نیست. قبل از اعلام انتشار، وضعیت آخرین اجرای GitHub Actions و آزمایش دستی EXE روی ویندوز تمیز را بررسی کنید.
 
@@ -12,7 +12,7 @@
 - گزارش وضعیت موجودی و فهرست کالاهای کم‌موجودی/ناموجود به CSV سازگار با Excel
 - گزارش گردش و تاریخچه تراکنش‌ها با امکان فیلتر بازه تاریخ و کد کالا در لایه گزارش
 - نمایش آخرین تاریخ گردش، کسری نسبت به حداقل موجودی و وضعیت هر کالا در گزارش موجودی
-- ذخیره دیتابیس در پوشه داده کاربر؛ روی ویندوز: %APPDATA%\\EasyWarehouse\\anbar.db
+- ذخیره دیتابیس در پوشه داده کاربر؛ مسیر قدیمی `%APPDATA%\\EasyWarehouse\\anbar.db` برای حفظ اطلاعات نصب‌های قبلی عمداً ثابت مانده است.
 - پشتیبان‌گیری و بازیابی همراه با اعتبارسنجی SQLite و نسخه احتیاطی
 - رابط فارسی و راهنمای کاربر با F1
 
@@ -61,9 +61,9 @@ GitHub Actions تست‌ها را روی Ubuntu و Windows اجرا می‌کن�
 یا اجرای مستقیم PyInstaller:
 ```powershell
 python -m pip install -r requirements.txt
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name EasyWarehouse --add-data "app/database/schema.sql;app/database" --add-data "assets;assets" app/main.py
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name AnbardariAsan --add-data "app/database/schema.sql;app/database" --add-data "assets;assets" app/main.py
 ```
-خروجی مورد انتظار dist/EasyWarehouse.exe است. workflow در GitHub Actions، پس از موفقیت تست‌ها، EXE را با نام artifact EasyWarehouse-Windows-x64 منتشر می‌کند. Artifact با GitHub Release عمومی یکسان نیست؛ برای انتشار عمومی باید آن را به Release متصل کنید.
+خروجی مورد انتظار dist/AnbardariAsan.exe است. workflow در GitHub Actions، پس از موفقیت تست‌ها، فایل اجرایی را با نام artifact AnbardariAsan-Windows-x64 منتشر می‌کند. Artifact با GitHub Release عمومی یکسان نیست؛ برای انتشار عمومی باید آن را به Release متصل کنید.
 
 ## گزارش کاردکس کالا
 
