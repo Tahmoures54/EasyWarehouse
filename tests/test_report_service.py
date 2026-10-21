@@ -156,3 +156,22 @@ def test_inventory_count_template_is_read_only_and_csv_exported(tmp_path):
     assert rows[0]["counted_stock"] == ""
     assert rows[0]["variance"] == ""
     assert products.get(product.code).stock == 7
+
+
+def test_kardex_uses_real_document_number_and_rejects_ambiguous_user_code(tmp_path):
+    db, products, transactions, reports = _services(tmp_path)
+    first = products.add("کالای اول", user_code="DUP")
+    second = products.add("کالای دوم", user_code="DUP")
+    saved, _, document_no = transactions.add_document([
+        {"code": first.code, "type": "IN", "qty": 3},
+        {"code": second.code, "type": "IN", "qty": 4},
+    ], date_str="2026-10-01")
+    rows = reports.kardex_rows(first.code)
+    assert rows[-1]["document_no"] == document_no
+    try:
+        reports.kardex_rows("DUP")
+    except ValueError as exc:
+        assert "تکراری" in str(exc)
+        assert first.code in str(exc) and second.code in str(exc)
+    else:
+        raise AssertionError("duplicate commercial code must be disambiguated")
