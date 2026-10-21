@@ -109,7 +109,9 @@ class UserService:
                     (username, display_name, salt, hashed, self._now().isoformat()),
                 )
                 self._audit(conn, username, "first_admin_created", "حساب مدیر اولیه ساخته شد")
-        except DatabaseError:
+        except DatabaseError as exc:
+            if "UNIQUE constraint failed: app_users.username" in str(exc):
+                raise AuthenticationError("این نام کاربری قبلاً ثبت شده است.") from exc
             raise
         except sqlite3.IntegrityError as exc:
             raise AuthenticationError("این نام کاربری قبلاً ثبت شده است.") from exc
