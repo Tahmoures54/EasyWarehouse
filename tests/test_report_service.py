@@ -113,3 +113,16 @@ def test_kardex_rejects_unknown_product_and_reversed_dates(tmp_path):
         assert "تاریخ شروع" in str(exc)
     else:
         raise AssertionError("reversed date range should be rejected")
+
+
+def test_kardex_csv_filters_movement_type_but_keeps_opening_balance(tmp_path):
+    _, products, transactions, reports = _services(tmp_path)
+    product = products.add("یاتاقان")
+    transactions.add(product.code, "IN", 10, "2026-10-01", "ورود")
+    transactions.add(product.code, "OUT", 3, "2026-10-02", "خروج")
+    transactions.add(product.code, "RETURN", 1, "2026-10-03", "عودت")
+    path = reports.export_kardex_csv(tmp_path / "out.csv", product.code, "2026-10-02", None, "خروج")
+    rows = list(__import__("csv").DictReader(path.read_text(encoding="utf-8-sig").splitlines()))
+    assert [row["type"] for row in rows] == ["مانده ابتدای دوره", "خروج"]
+    assert rows[0]["balance"] == "10"
+    assert rows[1]["balance"] == "7"
