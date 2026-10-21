@@ -402,7 +402,7 @@ class TransactionService:
                         f"SELECT COALESCE(SUM({STOCK_CASE}), 0) FROM transactions t WHERE t.code=?",
                         (code,),
                     ).fetchone()
-                    if float(stock_row[0] or 0) + delta < -_EPSILON:
+                    if float(stock_row[0] or 0) + delta < -1e-9:
                         raise ValueError(
                             f"ابطال سند موجودی کالای «{code}» را منفی می‌کند؛ "
                             "ابتدا موجودی را تأمین یا طبق سیاست مجازسازی موجودی منفی اقدام کنید."
