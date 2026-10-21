@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""تنظیمات مرکزی EasyWarehouse."""
+"""تنظیمات مرکزی انبارداری آسان."""
 
 from __future__ import annotations
 
@@ -14,8 +14,10 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------- metadata
 
+APP_BRAND: Final = "انبارداری آسان"
+# APP_NAME عمداً ثابت مانده تا دیتابیس نصب‌های قبلی پیدا شود.
 APP_NAME: Final = "EasyWarehouse"
-APP_TITLE: Final = "EasyWarehouse - مدیریت انبار"
+APP_TITLE: Final = "انبارداری آسان — مدیریت انبار"
 APP_VERSION: Final = "1.2.0"
 APP_AUTHOR: Final = "Tahmoures54"
 APP_LICENSE: Final = "MIT"
@@ -134,6 +136,7 @@ def __getattr__(name: str):
 __all__ = [
     "ALLOW_NEGATIVE_STOCK",
     "APP_AUTHOR",
+    "APP_BRAND",
     "APP_GEOMETRY",
     "APP_LICENSE",
     "APP_MIN_SIZE",
