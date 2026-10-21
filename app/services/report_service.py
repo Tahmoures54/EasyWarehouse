@@ -268,6 +268,7 @@ class ReportService:
             balance += incoming - outgoing
             rows.append({
                 "id": int(tx["id"]),
+                "document_no": f"EW-{int(tx['id']):06d}",
                 "date": tx["date"],
                 "code": product["user_code"] or internal_code,
                 "name": product["name"] or "",
@@ -283,6 +284,7 @@ class ReportService:
         if start:
             rows.insert(0, {
                 "id": "",
+                "document_no": "",
                 "date": start,
                 "code": product["user_code"] or internal_code,
                 "name": product["name"] or "",
@@ -305,7 +307,7 @@ class ReportService:
         return self.export_csv(
             path,
             self.kardex_rows(code, start_date, end_date),
-            fieldnames=("id", "date", "code", "name", "type", "incoming", "outgoing", "balance", "unit", "note"),
+            fieldnames=("id", "document_no", "date", "code", "name", "type", "incoming", "outgoing", "balance", "unit", "note"),
         )
 
     # ---------------------------------------------------------------- CSV
