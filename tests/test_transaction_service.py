@@ -152,6 +152,24 @@ def test_foreign_keys_are_enabled_for_every_connection(services):
             )
 
 
+def test_document_metadata_is_persisted_and_numbered(services):
+    ps, ts = services
+    product = ps.add("سنددار")
+    tx, _ = ts.add(
+        product.code, "IN", 4, date_str="2026-10-21", note="رسید خرید",
+        party_name="شرکت نمونه", delivered_by="علی", received_by="انباردار",
+        reference_no="PO-1405-18",
+    )
+    assert tx.document_no == f"EW-{tx.id:06d}"
+    loaded = ts.get(tx.id)
+    assert loaded is not None
+    assert loaded.document_no == tx.document_no
+    assert loaded.party_name == "شرکت نمونه"
+    assert loaded.delivered_by == "علی"
+    assert loaded.received_by == "انباردار"
+    assert loaded.reference_no == "PO-1405-18"
+
+
 def test_jalali_date_round_trip():
     assert from_jalali("1405/07/29") == "2026-10-21"
     assert to_jalali("2026-10-21") == "1405/07/29"
