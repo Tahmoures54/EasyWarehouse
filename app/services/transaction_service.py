@@ -361,9 +361,26 @@ class TransactionService:
     def delete(self, tx_id: int) -> None:
         if isinstance(tx_id, bool) or not isinstance(tx_id, int) or tx_id <= 0:
             raise ValueError("شناسه تراکنش نامعتبر است.")
-        deleted = self.db.run("DELETE FROM transactions WHERE id=?", (tx_id,))
-        if deleted == 0:
-            raise ValueError(f"تراکنشی با شناسه {tx_id} یافت نشد.")
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT document_id FROM transactions WHERE id = ?", (tx_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"تراکنشی با شناسه {tx_id} یافت نشد.")
+            document_id = row["document_id"]
+            if document_id is not None:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM transactions WHERE document_id = ?",
+                    (document_id,),
+                ).fetchone()[0]
+                if int(count) > 1:
+                    raise ValueError(
+                        "این گردش یکی از اقلام یک سند چندقلمی است؛ حذف تکی مجاز نیست "
+                        "تا سند ناقص نشود. برای اصلاح، کل سند باید از مسیر ابطال/اصلاح سند مدیریت شود."
+                    )
+            conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+            if document_id is not None:
+                conn.execute("DELETE FROM warehouse_documents WHERE id = ?", (document_id,))
 
     # --------------------------------------------------------------- read
 
