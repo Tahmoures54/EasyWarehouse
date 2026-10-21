@@ -54,6 +54,7 @@ class UserManagementDialog(tk.Toplevel):
         actions.pack(fill=tk.X, pady=(10, 0))
         ttk.Button(actions, text="ایجاد کاربر", style="Primary.TButton", command=self._create_user).pack(side=tk.LEFT)
         ttk.Button(actions, text="فعال/غیرفعال‌سازی", command=self._toggle_active).pack(side=tk.LEFT, padx=6)
+        ttk.Button(actions, text="تغییر نقش", command=self._change_role).pack(side=tk.LEFT, padx=6)
         ttk.Button(actions, text="بازنشانی رمز", command=self._reset_password).pack(side=tk.LEFT)
         ttk.Button(actions, text="تازه‌سازی", command=self.refresh).pack(side=tk.RIGHT)
 
@@ -94,9 +95,9 @@ class UserManagementDialog(tk.Toplevel):
         display = simpledialog.askstring("کاربر جدید", "نام نمایشی:", parent=self)
         if not display:
             return
-        role = simpledialog.askstring("نقش کاربر", "نقش را وارد کنید: operator یا viewer", initialvalue="operator", parent=self)
-        if role not in ("operator", "viewer"):
-            messagebox.showwarning("نقش نامعتبر", "برای امنیت، فقط operator یا viewer را می‌توان از این فرم ساخت.", parent=self)
+        role = simpledialog.askstring("نقش کاربر", "نقش را وارد کنید: admin، operator یا viewer", initialvalue="operator", parent=self)
+        if role not in ("admin", "operator", "viewer"):
+            messagebox.showwarning("نقش نامعتبر", "نقش باید admin، operator یا viewer باشد.", parent=self)
             return
         password = simpledialog.askstring("رمز اولیه", "رمز عبور (حداقل ۱۰ نویسه، شامل حرف و عدد):", show="•", parent=self)
         if password is None:
@@ -121,6 +122,21 @@ class UserManagementDialog(tk.Toplevel):
             return
         try:
             self.users.set_active(item_id, not is_active, self.actor)
+            self.refresh()
+        except AuthenticationError as exc:
+            messagebox.showerror("عملیات ناموفق", str(exc), parent=self)
+
+    def _change_role(self) -> None:
+        if self._selected() is None:
+            return
+        item_id = int(self.tree.selection()[0])
+        role = simpledialog.askstring(
+            "تغییر نقش", "نقش جدید: admin، operator یا viewer", parent=self
+        )
+        if role is None:
+            return
+        try:
+            self.users.set_role(item_id, role.strip(), self.actor)
             self.refresh()
         except AuthenticationError as exc:
             messagebox.showerror("عملیات ناموفق", str(exc), parent=self)
