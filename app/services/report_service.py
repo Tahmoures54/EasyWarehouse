@@ -205,6 +205,105 @@ class ReportService:
             "note": row["note"] or "",
         } for row in rows]
 
+    # --------------------------------------------------------------- kardex
+
+    def kardex_rows(
+        self,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """کاردکس کامل یک کالا با مانده قبل از بازه و مانده پس از هر گردش."""
+        from app.services.transaction_service import STOCK_CASE
+
+        value = str(code or "").strip()
+        if not value:
+            raise ValueError("کد کالا را برای تهیه کاردکس انتخاب کنید.")
+        start = validate_transaction_date(start_date) if start_date else None
+        end = validate_transaction_date(end_date) if end_date else None
+        if start and end and start > end:
+            raise ValueError("تاریخ شروع نمی‌تواند بعد از تاریخ پایان باشد.")
+
+        product = self.db.one(
+            "SELECT code, user_code, name, unit FROM products "
+            "WHERE code = ? OR user_code = ? ORDER BY CASE WHEN code = ? THEN 0 ELSE 1 END LIMIT 1",
+            (value, value, value),
+        )
+        if not product:
+            raise ValueError(f"کالایی با کد «{value}» یافت نشد.")
+        internal_code = product["code"]
+
+        opening = 0.0
+        if start:
+            row = self.db.one(
+                f"""SELECT COALESCE(SUM({STOCK_CASE}), 0) AS stock
+                    FROM transactions t WHERE t.code = ? AND t.date < ?""",
+                (internal_code, start),
+            )
+            opening = float(row["stock"] or 0)
+
+        clauses = ["t.code = ?"]
+        params: list[Any] = [internal_code]
+        if start:
+            clauses.append("t.date >= ?")
+            params.append(start)
+        if end:
+            clauses.append("t.date <= ?")
+            params.append(end)
+
+        transactions = self.db.all(
+            f"""SELECT t.id, t.date, t.type, t.qty, t.note
+                FROM transactions t WHERE {" AND ".join(clauses)}
+                ORDER BY t.date ASC, t.id ASC""",
+            tuple(params),
+        )
+
+        balance = opening
+        rows: List[Dict[str, Any]] = []
+        for tx in transactions:
+            qty = float(tx["qty"])
+            tx_type = tx["type"]
+            incoming = qty if tx_type in ("IN", "RETURN") else 0.0
+            outgoing = qty if tx_type == "OUT" else 0.0
+            balance += incoming - outgoing
+            rows.append({
+                "id": int(tx["id"]),
+                "date": tx["date"],
+                "type": _TYPE_LABELS.get(tx_type, tx_type or ""),
+                "incoming": incoming,
+                "outgoing": outgoing,
+                "balance": balance,
+                "unit": product["unit"] or "",
+                "note": tx["note"] or "",
+            })
+
+        # یک ردیف افتتاحیه باعث می‌شود موجودی ابتدای بازه و تراز قابل فهم باشد.
+        if start:
+            rows.insert(0, {
+                "id": "",
+                "date": start,
+                "type": "مانده ابتدای دوره",
+                "incoming": 0.0,
+                "outgoing": 0.0,
+                "balance": opening,
+                "unit": product["unit"] or "",
+                "note": "مانده محاسبه‌شده از تمام گردش‌های پیش از شروع بازه",
+            })
+        return rows
+
+    def export_kardex_csv(
+        self,
+        path: str | Path,
+        code: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+    ) -> Path:
+        return self.export_csv(
+            path,
+            self.kardex_rows(code, start_date, end_date),
+            fieldnames=("id", "date", "type", "incoming", "outgoing", "balance", "unit", "note"),
+        )
+
     # ---------------------------------------------------------------- CSV
 
     @staticmethod
