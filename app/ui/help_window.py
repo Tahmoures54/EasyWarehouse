@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Iterable
 
-from app.config import APP_NAME
+from app.config import APP_BRAND
 from app.ui import theme as T
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class HelpWindow(tk.Toplevel):
 
     # -------------------------------------------------------------- setup --
     def _configure_window(self, master: tk.Misc | None) -> None:
-        self.title(f"راهنمای کاربر — {APP_NAME}")
+        self.title(f"راهنمای کاربر — {APP_BRAND}")
         self.minsize(MIN_WIDTH, MIN_HEIGHT)
         self.configure(bg=T.BG)
         self.protocol("WM_DELETE_WINDOW", self._close)
