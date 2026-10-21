@@ -47,7 +47,7 @@ class LoginDialog(tk.Toplevel):
         else:
             ttk.Label(card, text="ورود به حساب کاربری", style="Section.TLabel").pack(anchor="e", pady=(0, 10))
 
-        self._field(card, "نام کاربری", self.username_var)
+        self.username_entry = self._field(card, "نام کاربری", self.username_var)
         self.password_entry = self._field(card, "رمز عبور", self.password_var, show="•")
         if self.setup_mode:
             self._field(card, "تکرار رمز عبور", self.confirm_var, show="•")
@@ -78,10 +78,7 @@ class LoginDialog(tk.Toplevel):
     def _focus_initial(self) -> None:
         try:
             self.focus_force()
-            if self.setup_mode:
-                self.winfo_children()[0].winfo_children()[3].focus_set()
-            else:
-                self.focus_set()
+            self.username_entry.focus_set()
         except tk.TclError:
             pass
 
