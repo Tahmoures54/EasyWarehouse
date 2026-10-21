@@ -418,11 +418,27 @@ class MainWindow(tk.Tk):
 
         # مسیر واقعی مورد استفاده برنامه؛ در صورت طولانی بودن، متن قابل انتخاب نیست
         # اما مسیر کامل در خود نوار وضعیت باقی می‌ماند.
+        database_box = ttk.Frame(status, style="Status.TFrame")
+        database_box.pack(side=tk.RIGHT, padx=(0, 10))
         ttk.Label(
-            status,
+            database_box,
             text=f"پایگاه داده: {get_db_path()}",
             style="Status.TLabel",
-        ).pack(side=tk.RIGHT, padx=(0, 10))
+        ).pack(side=tk.RIGHT)
+
+        # چراغ کوچک چشمک‌زن برای ایجاد حس پویایی؛ تزئینی است و وضعیت اتصال DB را
+        # ادعا نمی‌کند.
+        self.activity_led = tk.Canvas(
+            database_box,
+            width=14,
+            height=14,
+            highlightthickness=0,
+            bd=0,
+            bg=self._status_background(),
+        )
+        self.activity_led.pack(side=tk.RIGHT, padx=(7, 4))
+        self._activity_led_on = False
+        self._animate_activity_led()
 
         developer_ad = ttk.Label(
             status,
@@ -443,6 +459,27 @@ class MainWindow(tk.Tk):
             "<Leave>",
             lambda _event: developer_ad.configure(foreground=""),
         )
+
+    @staticmethod
+    def _status_background() -> str:
+        """رنگ پس‌زمینه نوار وضعیت را از تم فعال می‌گیرد."""
+        return getattr(T, "BG", "#F3F6F8")
+
+    def _animate_activity_led(self) -> None:
+        """چراغ ظریف چشمک‌زن کنار مسیر دیتابیس."""
+        try:
+            if not self.winfo_exists() or not hasattr(self, "activity_led"):
+                return
+            self.activity_led.delete("all")
+            color = "#16A34A" if self._activity_led_on else "#86EFAC"
+            self.activity_led.create_oval(
+                2, 2, 12, 12, fill=color, outline=color
+            )
+            self._activity_led_on = not self._activity_led_on
+            self.after(650, self._animate_activity_led)
+        except tk.TclError:
+            # هنگام بسته شدن پنجره ممکن است callback بعدی دیگر لازم نباشد.
+            return
 
     @staticmethod
     def _contact_developer() -> None:
