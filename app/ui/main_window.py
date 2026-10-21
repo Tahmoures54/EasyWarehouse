@@ -52,6 +52,8 @@ class MainWindow(tk.Tk):
         self._help_win: Optional[HelpWindow] = None
         self._about_win: Optional[AboutWindow] = None
         self._products_win: Optional[tk.Toplevel] = None
+        self._transaction_win: Optional[tk.Toplevel] = None
+        self.form: Optional[TransactionForm] = None
 
         try:
             self.db = DB()
@@ -160,7 +162,6 @@ class MainWindow(tk.Tk):
         self._build_header()
         self._build_metrics()
         self._build_quick_actions()
-        self._build_transaction_form()
         self._build_workspace()
         self._build_status_bar()
 
@@ -255,20 +256,49 @@ class MainWindow(tk.Tk):
             style="Secondary.TButton",
             command=self._export_inventory_report,
         ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
+        ttk.Button(
+            quick,
+            text="↔  ثبت تراکنش انبار",
+            style="Primary.TButton",
+            command=self._open_transaction_form,
+        ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
         ttk.Label(
             quick, text="جست‌وجوی گردش‌ها: Ctrl+F", style="Muted.TLabel"
         ).pack(side=tk.RIGHT)
 
-    def _build_transaction_form(self) -> None:
-        form_wrap = ttk.Frame(self, padding=(16, 2, 16, 8))
-        form_wrap.pack(fill=tk.X)
-        ttk.Label(form_wrap, text="ثبت گردش کالا", style="Section.TLabel").pack(
-            anchor="w", pady=(0, 5)
-        )
+    def _open_transaction_form(self) -> None:
+        """فرم ثبت تراکنش را در یک پنجره مستقل باز می‌کند."""
+        if self._win_alive(self._transaction_win):
+            self._transaction_win.lift()
+            self._transaction_win.focus_force()
+            if self.form is not None:
+                self.form.refresh(None)
+            return
+
+        win = tk.Toplevel(self)
+        self._transaction_win = win
+        win.title("ثبت تراکنش انبار")
+        win.geometry("620x430")
+        win.minsize(580, 390)
+        win.configure(bg=T.BG)
+        win.transient(self)
+        win.protocol("WM_DELETE_WINDOW", self._close_transaction_form)
+
         self.form = TransactionForm(
-            form_wrap, self.ps, self.ts, on_ok=self.refresh
+            win, self.ps, self.ts, on_ok=self.refresh
         )
-        self.form.pack(fill=tk.X)
+        self.form.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+        self.form.refresh(None)
+        win.lift()
+        win.focus_force()
+
+    def _close_transaction_form(self) -> None:
+        """پنجره فرم تراکنش را ببند و ارجاع‌های آن را آزاد کن."""
+        win = self._transaction_win
+        self._transaction_win = None
+        self.form = None
+        if self._win_alive(win):
+            win.destroy()
 
     def _build_workspace(self) -> None:
         mid = ttk.Frame(self, padding=(16, 2, 16, 12))
@@ -415,11 +445,12 @@ class MainWindow(tk.Tk):
             logger.exception("Failed to load transactions")
             errors.append(f"جدول تراکنش‌ها: {exc}")
 
-        try:
-            self.form.refresh(None)
-        except Exception:
-            logger.exception("Failed to refresh transaction form")
-            errors.append("فرم ثبت تراکنش")
+        if self.form is not None and self._win_alive(self._transaction_win):
+            try:
+                self.form.refresh(None)
+            except Exception:
+                logger.exception("Failed to refresh transaction form")
+                errors.append("فرم ثبت تراکنش")
 
         try:
             all_products = self.ps.all()
@@ -872,13 +903,11 @@ class MainWindow(tk.Tk):
         self.db = DB()
         self._init_services()  # در صورت خالی بودن DB جدید، seed اجرا می‌شود
 
-        # فرم به سرویس‌های قدیمی اشاره می‌کرد؛ بازسازی می‌شود
-        form_parent = self.form.master
-        self.form.destroy()
-        self.form = TransactionForm(
-            form_parent, self.ps, self.ts, on_ok=self.refresh
-        )
-        self.form.pack(fill=tk.X)
+        # اگر فرم ثبت تراکنش باز است، آن را ببند تا به سرویس‌های جدید وصل شود.
+        if self._win_alive(self._transaction_win):
+            self._transaction_win.destroy()
+        self._transaction_win = None
+        self.form = None
 
         # پنجرهٔ کالاها (اگر باز است) با سرویس‌های قدیمی کار می‌کرد
         if self._win_alive(self._products_win):
