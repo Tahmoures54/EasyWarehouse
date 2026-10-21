@@ -56,11 +56,11 @@ def create_product_template(path: str | Path) -> Path:
 
     sheet["A1"].comment = Comment(
         "این ردیف هدر است. اطلاعات کالاها را از ردیف ۲ به بعد وارد کنید.",
-        "EasyWarehouse",
+        "انبارداری آسان",
     )
     sheet["D1"].comment = Comment(
         "عدد صفر یا مثبت. اگر خالی بماند، صفر در نظر گرفته می‌شود.",
-        "EasyWarehouse",
+        "انبارداری آسان",
     )
 
     for col, width in {"A": 20, "B": 30, "C": 16, "D": 20, "E": 18, "F": 20}.items():
