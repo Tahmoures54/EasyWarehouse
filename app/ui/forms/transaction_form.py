@@ -43,6 +43,7 @@ class TransactionForm(ttk.LabelFrame):
         self.ps, self.ts, self.on_ok = product_svc, tx_svc, on_ok
         self.on_manage_products = on_manage_products
         self._cat: Optional[str] = None
+        self._items: list[dict] = []
         self._build()
         self.refresh()
 
@@ -160,9 +161,34 @@ class TransactionForm(ttk.LabelFrame):
         self._note_entry.grid(row=7, column=0, sticky="ew", ipady=4)
         self._note_entry.bind("<Return>", lambda _e: self._submit())
 
+        # Multi-line document cart.
+        cart = tk.Frame(self, bg=T.CARD_BG)
+        cart.grid(row=8, column=0, sticky="ew", pady=(4, 0))
+        tk.Label(
+            cart, text="اقلام سند (برای افزودن هر کالا «افزودن قلم» را بزنید)",
+            bg=T.CARD_BG, fg=T.TEXT, font=T.FONT_BOLD, anchor="e",
+        ).pack(fill=tk.X)
+        self.cart_list = tk.Listbox(
+            cart, height=4, font=T.FONT, bg=T.CARD_BG, fg=T.TEXT,
+            activestyle="none", selectbackground=T.PRIMARY,
+        )
+        self.cart_list.pack(fill=tk.X, pady=(4, 4))
+        cart_actions = ttk.Frame(cart)
+        cart_actions.pack(fill=tk.X)
+        ttk.Button(
+            cart_actions, text="افزودن قلم", style="Secondary.TButton",
+            command=self._add_line,
+        ).pack(side=tk.RIGHT, padx=(0, 6))
+        ttk.Button(
+            cart_actions, text="حذف قلم انتخاب‌شده", style="Ghost.TButton",
+            command=self._remove_line,
+        ).pack(side=tk.RIGHT)
+        self.cart_count = ttk.Label(cart_actions, text="۰ قلم")
+        self.cart_count.pack(side=tk.LEFT)
+
         # Document metadata persisted with each stock movement.
         document_fields = tk.Frame(self, bg=T.CARD_BG)
-        document_fields.grid(row=8, column=0, sticky="ew", pady=(10, 0))
+        document_fields.grid(row=9, column=0, sticky="ew", pady=(10, 0))
         document_fields.columnconfigure(0, weight=1, uniform="document_fields")
         document_fields.columnconfigure(1, weight=1, uniform="document_fields")
         tk.Label(document_fields, text="طرف حساب / واحد", bg=T.CARD_BG,
@@ -190,13 +216,13 @@ class TransactionForm(ttk.LabelFrame):
 
         # Actions
         ttk.Separator(self, orient="horizontal").grid(
-            row=9, column=0, sticky="ew", pady=(14, 10)
+            row=10, column=0, sticky="ew", pady=(14, 10)
         )
         actions = ttk.Frame(self)
-        actions.grid(row=10, column=0, sticky="ew")
+        actions.grid(row=11, column=0, sticky="ew")
         actions.columnconfigure(0, weight=1)
         ttk.Button(
-            actions, text="✓  ثبت تراکنش", style="Primary.TButton",
+            actions, text="✓  ثبت قطعی سند", style="Primary.TButton",
             command=self._submit,
         ).grid(row=0, column=2, padx=(6, 0), sticky="e")
         ttk.Button(
@@ -263,46 +289,90 @@ class TransactionForm(ttk.LabelFrame):
 
     # ----------------------------------------------------------------- submit
 
-    def _submit(self) -> None:
+    def _add_line(self) -> None:
         code = self.ps.code_from_label(self.prod_var.get())
         if not code:
             self._show_error("لطفاً یک کالا انتخاب کنید.")
             return
-
         try:
             qty = parse_positive_qty(self.qty_var.get())
+        except ValueError as exc:
+            self._show_error(str(exc))
+            return
+        product = self.ps.get(code)
+        if product is None:
+            self._show_error("کالای انتخاب‌شده دیگر در فهرست وجود ندارد.")
+            return
+        self._items.append({
+            "code": code, "name": product.name, "unit": product.unit,
+            "type": self.type_var.get(), "qty": qty,
+        })
+        self._refresh_cart()
+        self.qty_var.set("")
+        self.prod_var.set("")
+        self._show_empty_info()
+        self.combo.focus_set()
+
+    def _remove_line(self) -> None:
+        selected = self.cart_list.curselection()
+        if not selected:
+            self._show_error("ابتدا یک قلم از فهرست سند انتخاب کنید.")
+            return
+        del self._items[selected[0]]
+        self._refresh_cart()
+
+    def _refresh_cart(self) -> None:
+        self.cart_list.delete(0, tk.END)
+        for index, item in enumerate(self._items, 1):
+            kind = TYPES.get(item["type"], item["type"])
+            self.cart_list.insert(
+                tk.END, f"{index}. {item['name']} | {kind} | {item['qty']:g} {item['unit']}"
+            )
+        self.cart_count.config(text=f"{len(self._items)} قلم")
+
+    def _submit(self) -> None:
+        items = list(self._items)
+        # Backward-compatible shortcut: the selected item can be posted as a one-line document.
+        if not items and self.prod_var.get().strip():
+            code = self.ps.code_from_label(self.prod_var.get())
+            try:
+                qty = parse_positive_qty(self.qty_var.get())
+            except ValueError as exc:
+                self._show_error(str(exc))
+                return
+            items.append({"code": code, "type": self.type_var.get(), "qty": qty})
+        if not items:
+            self._show_error("برای ثبت سند، دست‌کم یک قلم کالا اضافه کنید.")
+            return
+        try:
             tx_date = validate_transaction_date(from_jalali(self.date_var.get()))
         except ValueError as exc:
             self._show_error(str(exc))
             return
-
         try:
-            tx, warn = self.ts.add(
-                code,
-                self.type_var.get(),
-                qty,
-                tx_date,
-                self.note_var.get().strip(),
+            saved, warnings, document_no = self.ts.add_document(
+                items,
+                date_str=tx_date,
+                note=self.note_var.get().strip(),
                 party_name=self.party_var.get().strip(),
                 delivered_by=self.delivered_var.get().strip(),
                 received_by=self.received_var.get().strip(),
                 reference_no=self.reference_var.get().strip(),
             )
-        except Exception as exc:  # noqa: BLE001 — نمایش خطای دامنه به کاربر
-            logger.exception("Transaction add failed")
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Warehouse document post failed")
             self._show_error(str(exc))
             return
 
-        summary = f"{tx.type_fa()} به مقدار {tx.qty:g} {tx.unit} ثبت شد."
-        if warn:
+        summary = f"سند {document_no} با {len(saved)} قلم ثبت قطعی شد."
+        if warnings:
             messagebox.showwarning(
-                "ثبت شد با هشدار",
-                f"{summary}\n\n{warn}",
+                "سند ثبت شد با هشدار",
+                summary + "\n\n" + "\n".join(warnings),
                 parent=self.winfo_toplevel(),
             )
         else:
-            messagebox.showinfo("ثبت شد", summary, parent=self.winfo_toplevel())
-
+            messagebox.showinfo("ثبت سند", summary, parent=self.winfo_toplevel())
         self._clear(preserve_type=True)
         try:
             if self.on_ok is not None:
@@ -314,6 +384,8 @@ class TransactionForm(ttk.LabelFrame):
         self.prod_var.set("")
         self.qty_var.set("")
         self.note_var.set("")
+        self._items.clear()
+        self._refresh_cart()
         self.party_var.set("")
         self.reference_var.set("")
         self.delivered_var.set("")
