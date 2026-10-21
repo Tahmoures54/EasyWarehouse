@@ -246,12 +246,6 @@ class MainWindow(tk.Tk):
         ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
         ttk.Button(
             quick,
-            text="+  ثبت کالای جدید",
-            style="Secondary.TButton",
-            command=self._add_product,
-        ).pack(side=tk.LEFT, padx=(0, 7), ipady=3)
-        ttk.Button(
-            quick,
             text="⇩  خروجی گزارش موجودی",
             style="Secondary.TButton",
             command=self._export_inventory_report,
@@ -526,7 +520,7 @@ class MainWindow(tk.Tk):
 
     def _create_product_list_window(self) -> tk.Toplevel:
         win = tk.Toplevel(self)
-        win.title("کتابخانه کالاها")
+        win.title("فهرست و کدگذاری کالا")
         win.geometry("1040x520")
         win.minsize(960, 460)
         win.configure(bg=T.BG)
@@ -536,12 +530,27 @@ class MainWindow(tk.Tk):
         search_var = tk.StringVar()
         searchbar = ttk.Frame(win)
         searchbar.pack(fill=tk.X, padx=10, pady=(10, 0))
-        ttk.Label(searchbar, text="جست‌وجوی کالا (نام یا کد):").pack(
+        ttk.Label(searchbar, text="جست‌وجوی فهرست (نام یا کد):").pack(
             side=tk.LEFT, padx=(0, 6)
         )
         ttk.Entry(searchbar, textvariable=search_var).pack(
             side=tk.LEFT, fill=tk.X, expand=True
         )
+
+        # ثبت کالا از همین بخش انجام می‌شود؛ ابتدا کد تجاری بررسی می‌شود.
+        codebar = ttk.Frame(win)
+        codebar.pack(fill=tk.X, padx=10, pady=(8, 0))
+        ttk.Label(codebar, text="کد کالا برای بررسی/ثبت:").pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        entry_code_var = tk.StringVar()
+        code_entry = ttk.Entry(codebar, textvariable=entry_code_var, width=24)
+        code_entry.pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(
+            codebar,
+            text="اگر کد موجود باشد، کالای ثبت‌شده انتخاب می‌شود.",
+            style="Muted.TLabel",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         def reload_and_refresh() -> None:
             self._reload_product_tree(tree, search_var.get())
@@ -564,6 +573,55 @@ class MainWindow(tk.Tk):
                 ProductForm(
                     win, self.ps, product=product, on_save=reload_and_refresh
                 )
+
+        def find_or_add_by_code() -> None:
+            """کد موجود را انتخاب کن؛ در غیر این صورت فرم ثبت را با کد باز کن."""
+            user_code = entry_code_var.get().strip()
+            if not user_code:
+                messagebox.showinfo(
+                    "کد کالا",
+                    "ابتدا کد کالا را وارد کنید.",
+                    parent=win,
+                )
+                code_entry.focus_set()
+                return
+
+            try:
+                matches = self.ps.get_by_user_code(user_code)
+            except Exception as exc:
+                logger.exception("Product code lookup failed")
+                messagebox.showerror("خطا در جست‌وجوی کد", str(exc), parent=win)
+                return
+
+            if matches:
+                self._reload_product_tree(tree, search_var.get())
+                # اگر جست‌وجوی عمومی فعال است و کد در آن نیست، فیلتر را روی کد بگذار.
+                if not tree.exists(matches[0].code):
+                    search_var.set(user_code)
+                    self._reload_product_tree(tree, user_code)
+                if tree.exists(matches[0].code):
+                    tree.selection_set(matches[0].code)
+                    tree.focus(matches[0].code)
+                    tree.see(matches[0].code)
+                names = "\n".join(
+                    f"• {item.name} (شناسه داخلی: {item.code})"
+                    for item in matches[:5]
+                )
+                messagebox.showinfo(
+                    "کد قبلاً ثبت شده است",
+                    f"برای کد «{user_code}» کالا در فهرست وجود دارد؛ ثبت تکراری انجام نشد.\n\n{names}",
+                    parent=win,
+                )
+                return
+
+            ProductForm(
+                win,
+                self.ps,
+                on_save=reload_and_refresh,
+                initial_user_code=user_code,
+            )
+
+        code_entry.bind("<Return>", lambda _e: find_or_add_by_code())
 
         def delete_selected() -> None:
             selection = tree.selection()
@@ -601,11 +659,9 @@ class MainWindow(tk.Tk):
         buttons.pack(fill=tk.X, padx=10, pady=6)
         ttk.Button(
             buttons,
-            text="جدید",
+            text="ثبت کالای جدید",
             style="Primary.TButton",
-            command=lambda: ProductForm(
-                win, self.ps, on_save=reload_and_refresh
-            ),
+            command=find_or_add_by_code,
         ).pack(side=tk.LEFT, padx=3)
         ttk.Button(
             buttons,
