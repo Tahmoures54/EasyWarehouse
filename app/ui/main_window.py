@@ -394,7 +394,7 @@ class MainWindow(tk.Tk):
         )
         self.transaction_search_entry.bind(
             "<KeyRelease>",
-            lambda _e: self.table.filter(self.tx_search_var.get()),
+            lambda _e: self._search_transaction_history(),
         )
         self.transaction_search_entry.bind(
             "<Escape>", self._clear_transaction_search
@@ -692,6 +692,17 @@ class MainWindow(tk.Tk):
                 tk.END,
                 f"… و {len(issues) - _LOW_LIST_LIMIT} مورد دیگر",
             )
+
+    def _search_transaction_history(self) -> None:
+        """جست‌وجو در سابقه دیتابیس، نه فقط ردیف‌های بارگذاری‌شده."""
+        query = self.tx_search_var.get().strip()
+        try:
+            rows = self.ts.search(query=query, limit=5000) if query else self.ts.all(limit=_TX_LOAD_LIMIT)
+            self.table.load(rows)
+            self.status_var.set(f"جست‌وجو: {len(rows):,} گردش" if query else f"نمایش آخرین {len(rows):,} گردش")
+        except Exception as exc:
+            logger.exception("Historical transaction search failed")
+            messagebox.showerror("خطا در جست‌وجوی گردش‌ها", str(exc), parent=self)
 
     # -------------------------------------------------------------- products
 
