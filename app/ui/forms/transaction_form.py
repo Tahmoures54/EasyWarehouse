@@ -33,12 +33,14 @@ class TransactionForm(ttk.LabelFrame):
         product_svc: ProductService,
         tx_svc: TransactionService,
         on_ok: Optional[Callable[[], None]] = None,
+        on_manage_products: Optional[Callable[[], None]] = None,
         **kwargs,
     ) -> None:
         super().__init__(
             master, text=" ثبت تراکنش ", style="Card.TLabelframe", padding=12, **kwargs
         )
         self.ps, self.ts, self.on_ok = product_svc, tx_svc, on_ok
+        self.on_manage_products = on_manage_products
         self._cat: Optional[str] = None
         self._build()
         self.refresh()
@@ -103,6 +105,12 @@ class TransactionForm(ttk.LabelFrame):
         ttk.Button(
             bf, text="پاک کردن", style="Secondary.TButton",
             command=self._clear, width=10,
+        ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(
+            bf,
+            text="فهرست و کدگذاری کالا",
+            style="Secondary.TButton",
+            command=self._manage_products,
         ).pack(side=tk.LEFT, padx=4)
 
     # -------------------------------------------------------------- selection
@@ -212,6 +220,18 @@ class TransactionForm(ttk.LabelFrame):
         self.combo.focus_set()
 
     # ---------------------------------------------------------------- helpers
+
+    def _manage_products(self) -> None:
+        """فهرست کدگذاری را باز کن و پس از بازگشت، گزینه‌های کالا را تازه کن."""
+        if self.on_manage_products is None:
+            messagebox.showinfo(
+                "فهرست کالاها",
+                "دسترسی به فهرست و کدگذاری کالا در این فرم پیکربندی نشده است.",
+                parent=self.winfo_toplevel(),
+            )
+            return
+        self.on_manage_products()
+        self.refresh()
 
     def _show_error(self, message: str) -> None:
         messagebox.showerror("خطا", message, parent=self.winfo_toplevel())
