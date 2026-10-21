@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""نقطه ورود EasyWarehouse.
+"""نقطه ورود انبارداری آسان.
 
 اجرا:
     python -m app.main
@@ -51,10 +51,10 @@ def _enable_dpi_awareness() -> None:
 def _setup_logging(verbose: bool = False) -> Optional[Path]:
     """پیکربندی لاگ به فایل و (در صورت وجود ترمینال) به stderr."""
     try:
-        from app.config import APP_NAME, APP_VERSION, get_db_path
+        from app.config import APP_BRAND, APP_VERSION, get_db_path
 
         log_dir = get_db_path().parent
-        log_path: Optional[Path] = log_dir / "easywarehouse.log"
+        log_path: Optional[Path] = log_dir / "anbardari-asan.log"
         handlers: list[logging.Handler] = [
             logging.FileHandler(log_path, encoding="utf-8"),
         ]
@@ -81,7 +81,7 @@ def _setup_logging(verbose: bool = False) -> Optional[Path]:
         from app.config import APP_NAME, APP_VERSION
 
         logger.info("=" * 60)
-        logger.info("%s %s starting", APP_NAME, APP_VERSION)
+        logger.info("%s %s starting", APP_BRAND, APP_VERSION)
         if log_path is not None:
             logger.info("Log file: %s", log_path)
     except Exception:
@@ -130,10 +130,10 @@ def _fatal_error(title: str, exc: BaseException) -> None:
 
 def _show_splash(duration_ms: int = 1500) -> None:
     """نمایش اسپلش؛ تا بسته‌شدن آن برمی‌نگردد."""
-    from app.config import APP_NAME, APP_VERSION
+    from app.config import APP_BRAND, APP_VERSION
     from app.ui.splash import SplashWindow
 
-    SplashWindow(APP_NAME, APP_VERSION, duration_ms=duration_ms).mainloop()
+    SplashWindow(APP_BRAND, APP_VERSION, duration_ms=duration_ms).mainloop()
 
 
 # ---------------------------------------------------------------- run
@@ -187,8 +187,8 @@ def _build_parser() -> argparse.ArgumentParser:
         version = "unknown"
 
     parser = argparse.ArgumentParser(
-        prog="easywarehouse",
-        description="مدیریت انبار EasyWarehouse",
+        prog="anbardari-asan",
+        description="برنامه انبارداری آسان",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {version}"
