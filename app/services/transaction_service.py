@@ -111,6 +111,10 @@ class TransactionService:
         date_str: Optional[str] = None,
         note: str = "",
         allow_overdraw: Optional[bool] = None,
+        party_name: str = "",
+        delivered_by: str = "",
+        received_by: str = "",
+        reference_no: str = "",
     ) -> Tuple[Transaction, Optional[str]]:
         """ثبت یک تراکنش.
 
@@ -142,6 +146,10 @@ class TransactionService:
             raise ValueError("سیاست موجودی منفی باید روشن یا خاموش باشد.")
 
         note_value = (note or "").strip()
+        party_value = (party_name or "").strip()
+        delivered_value = (delivered_by or "").strip()
+        received_value = (received_by or "").strip()
+        reference_value = (reference_no or "").strip()
 
         warning: Optional[str] = None
 
@@ -172,11 +180,19 @@ class TransactionService:
                     raise ValueError(warning + "\nثبت خروج انجام نشد.")
 
             cursor = conn.execute(
-                "INSERT INTO transactions (code, type, qty, date, note) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (product_code, type_normalized, quantity, transaction_date, note_value),
+                """INSERT INTO transactions
+                   (code, type, qty, date, note, document_no, party_name,
+                    delivered_by, received_by, reference_no)
+                   VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?)""",
+                (product_code, type_normalized, quantity, transaction_date, note_value,
+                 party_value, delivered_value, received_value, reference_value),
             )
             new_id = cursor.lastrowid
+            if new_id is not None:
+                conn.execute(
+                    "UPDATE transactions SET document_no = ? WHERE id = ?",
+                    (f"EW-{int(new_id):06d}", new_id),
+                )
             if new_id is None:
                 raise RuntimeError(
                     "شناسهٔ تراکنش جدید از دیتابیس دریافت نشد."
@@ -198,6 +214,11 @@ class TransactionService:
             name=name,
             unit=unit,
             user_code=user_code,
+            document_no=f"EW-{int(new_id):06d}",
+            party_name=party_value,
+            delivered_by=delivered_value,
+            received_by=received_value,
+            reference_no=reference_value,
         )
         return transaction, warning
 
@@ -342,6 +363,12 @@ class TransactionService:
             unit=row["unit"] or "",
             user_code=(row["user_code"] if "user_code" in row.keys() and row["user_code"]
                        else row["code"]),
+            document_no=(row["document_no"] if "document_no" in row.keys() and row["document_no"]
+                         else f"EW-{int(row['id']):06d}"),
+            party_name=(row["party_name"] if "party_name" in row.keys() else "") or "",
+            delivered_by=(row["delivered_by"] if "delivered_by" in row.keys() else "") or "",
+            received_by=(row["received_by"] if "received_by" in row.keys() else "") or "",
+            reference_no=(row["reference_no"] if "reference_no" in row.keys() else "") or "",
         )
 
     # --------------------------------------------------------------- stock
