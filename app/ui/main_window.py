@@ -929,6 +929,8 @@ class MainWindow(tk.Tk):
     def _import_products_excel(
         self, parent: tk.Misc, reload_products: Callable[[], None]
     ) -> None:
+        if not self._require_role("admin", "operator", action="ورود کالا از Excel"):
+            return
         path = filedialog.askopenfilename(
             parent=parent,
             title="انتخاب فایل Excel کالاها",
