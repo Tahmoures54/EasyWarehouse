@@ -303,10 +303,17 @@ class ReportService:
         code: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        transaction_type: str = "همه گردش‌ها",
     ) -> Path:
+        rows = self.kardex_rows(code, start_date, end_date)
+        allowed_types = {"همه گردش‌ها", "ورود", "خروج", "عودت"}
+        if transaction_type not in allowed_types:
+            raise ValueError("نوع گردش برای خروجی کاردکس معتبر نیست.")
+        if transaction_type != "همه گردش‌ها":
+            rows = [row for row in rows if row["type"] == "مانده ابتدای دوره" or row["type"] == transaction_type]
         return self.export_csv(
             path,
-            self.kardex_rows(code, start_date, end_date),
+            rows,
             fieldnames=("id", "document_no", "date", "code", "name", "type", "incoming", "outgoing", "balance", "unit", "note"),
         )
 
