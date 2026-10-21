@@ -1,4 +1,4 @@
--- EasyWarehouse schema v2.0.0
+-- EasyWarehouse schema v3.0.0
 -- نیازمند PRAGMA foreign_keys = ON (در DB._connect تنظیم می‌شود).
 -- این فایل با executescript اجرا می‌شود؛ در SQLite مدرن، اجرا اتمیک است.
 -- نسخه از طریق PRAGMA user_version در انتهای فایل تنظیم می‌شود.
@@ -61,8 +61,6 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_tx_code      ON transactions(code);
 CREATE INDEX IF NOT EXISTS idx_tx_date      ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_tx_code_date ON transactions(code, date DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tx_document_no ON transactions(document_no);
-CREATE INDEX IF NOT EXISTS idx_tx_party_name ON transactions(party_name);
 
 -- محصولات: جست‌وجوی نام (لیست کالاها)، تشخیص تکراری user_code، فیلتر دسته
 CREATE INDEX IF NOT EXISTS idx_prod_name      ON products(name);
