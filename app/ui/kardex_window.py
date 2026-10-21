@@ -156,7 +156,7 @@ class KardexWindow(tk.Toplevel):
             messagebox.showwarning("چاپ کاردکس", "ابتدا یک کاردکس دارای گردش نمایش دهید.", parent=self)
             return
         product = self._product
-        html_doc = build_kardex_html(product, self._visible_rows, self.start_var.get().strip(), self.end_var.get().strip(), self.type_var.get())
+        html_doc = build_kardex_html(product, self._all_rows, self.start_var.get().strip(), self.end_var.get().strip(), self.type_var.get())
         path = filedialog.asksaveasfilename(parent=self, title="ذخیره گزارش چاپی کاردکس", defaultextension=".html", initialfile=f"kardex-{product.code}.html", filetypes=[("گزارش HTML قابل چاپ", "*.html")])
         if not path:
             return
@@ -183,7 +183,7 @@ class KardexWindow(tk.Toplevel):
         try:
             saved = self.reports.export_kardex_csv(
                 path, code, self._normalize_date(self.start_var.get()),
-                self._normalize_date(self.end_var.get())
+                self._normalize_date(self.end_var.get()), self.type_var.get()
             )
             messagebox.showinfo("کاردکس", f"گزارش ذخیره شد:\n{saved}", parent=self)
         except Exception as exc:
