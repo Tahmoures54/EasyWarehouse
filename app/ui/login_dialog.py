@@ -20,14 +20,24 @@ class LoginDialog(tk.Toplevel):
         self.title("ورود به EasyWarehouse")
         self.configure(bg=T.BG)
         self.resizable(False, False)
-        self.transient(parent)
+        # A transient child of a withdrawn root can remain hidden on Windows.
+        # Only establish transient ownership when the parent is actually visible.
+        try:
+            if parent.winfo_viewable():
+                self.transient(parent)
+        except tk.TclError:
+            pass
         self.protocol("WM_DELETE_WINDOW", self._cancel)
         self.bind("<Escape>", lambda _event: self._cancel())
         self._build()
         self.update_idletasks()
         self._center()
+        # Explicitly map and raise the dialog before taking the modal grab.
+        # The parent MainWindow is intentionally withdrawn during authentication.
+        self.deiconify()
+        self.lift()
         self.grab_set()
-        self.after(100, self._focus_initial)
+        self.after(150, self._focus_initial)
 
     def _build(self) -> None:
         card = ttk.Frame(self, padding=24, style="Metric.TFrame")

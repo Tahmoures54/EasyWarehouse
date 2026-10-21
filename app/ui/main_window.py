@@ -79,6 +79,14 @@ class MainWindow(tk.Tk):
             self.current_user = login.user
         except Exception as exc:
             logger.exception("Authentication initialization failed")
+            # The root is withdrawn during login. Raise it before showing a
+            # parented error dialog, otherwise the error can remain hidden.
+            try:
+                self.deiconify()
+                self.lift()
+                self.update_idletasks()
+            except tk.TclError:
+                logger.debug("Could not raise root to show startup error", exc_info=True)
             messagebox.showerror("خطای ورود", str(exc), parent=self)
             self.destroy()
             return
