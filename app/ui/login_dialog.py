@@ -32,8 +32,10 @@ class LoginDialog(tk.Toplevel):
     def _build(self) -> None:
         card = ttk.Frame(self, padding=24, style="Metric.TFrame")
         card.pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
-        ttk.Label(card, text="EasyWarehouse", style="Header.TLabel").pack(anchor="center", pady=(0, 4))
-        ttk.Label(card, text="مدیریت انبار امن و محلی", style="Muted.TLabel").pack(anchor="center", pady=(0, 18))
+        brand = ttk.Frame(card, style="Header.TFrame", padding=(12, 10))
+        brand.pack(fill=tk.X, pady=(0, 18))
+        ttk.Label(brand, text="EasyWarehouse", style="Header.TLabel").pack(anchor="center", pady=(0, 4))
+        ttk.Label(brand, text="مدیریت انبار امن و محلی", style="Header.Subtitle.TLabel").pack(anchor="center")
 
         self.setup_mode = not self.users.has_users()
         self.username_var = tk.StringVar()
