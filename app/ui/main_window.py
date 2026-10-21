@@ -1203,7 +1203,20 @@ class MainWindow(tk.Tk):
         self.db = DB()
         from app.services.user_service import UserService
         self.users = UserService(self.db)
-        self._init_services()  # در صورت خالی بودن DB جدید، seed اجرا می‌شود
+
+        # پس از بازیابی، نشست قبلی نباید نقش مدیرِ دیتابیس قبلی را حفظ کند.
+        restored_user = self.db.one(
+            "SELECT role, active FROM app_users WHERE username = ?",
+            (self.current_user["username"],),
+        )
+        if restored_user is None or not restored_user["active"]:
+            self.current_user["role"] = "viewer"
+        else:
+            self.current_user["role"] = restored_user["role"]
+        self.config(menu="")
+        self._build_menu()
+
+        self._init_services()  # سرویس‌ها به دیتابیس بازیابی‌شده وصل می‌شوند
 
         # اگر فرم ثبت تراکنش باز است، آن را ببند تا به سرویس‌های جدید وصل شود.
         if self._win_alive(self._transaction_win):
