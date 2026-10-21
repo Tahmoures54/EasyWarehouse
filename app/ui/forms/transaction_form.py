@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""فرم ثبت تراکنش با Combobox."""
+"""فرم حرفه‌ای ثبت گردش کالا؛ لایهٔ نمایش مستقل از منطق ثبت."""
 
 from __future__ import annotations
 
@@ -23,9 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 class TransactionForm(ttk.LabelFrame):
-    """فرم کارت‌مانند ثبت تراکنش."""
+    """فرم کارت‌مانند و بخش‌بندی‌شدهٔ ثبت تراکنش انبار."""
 
-    INFO_EMPTY = "موجودی: —  |  واحد: —  |  حداقل: —  |  قفسه: —"
+    INFO_EMPTY = "ابتدا کالا را انتخاب کنید تا موجودی و مشخصات آن نمایش داده شود."
 
     def __init__(
         self,
@@ -37,7 +37,8 @@ class TransactionForm(ttk.LabelFrame):
         **kwargs,
     ) -> None:
         super().__init__(
-            master, text=" ثبت تراکنش ", style="Card.TLabelframe", padding=12, **kwargs
+            master, text="  ثبت گردش کالا  ", style="Card.TLabelframe",
+            padding=(16, 14), **kwargs
         )
         self.ps, self.ts, self.on_ok = product_svc, tx_svc, on_ok
         self.on_manage_products = on_manage_products
@@ -48,70 +49,136 @@ class TransactionForm(ttk.LabelFrame):
     # ----------------------------------------------------------------- layout
 
     def _build(self) -> None:
-        ttk.Label(self, text="نوع:").grid(row=0, column=0, sticky="e", padx=4, pady=4)
+        self.columnconfigure(0, weight=1)
+
+        # Intro / hierarchy
+        intro = tk.Frame(self, bg=T.CARD_BG)
+        intro.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        intro.columnconfigure(0, weight=1)
+        tk.Label(
+            intro, text="ثبت ورود، خروج و گردش کالا", bg=T.CARD_BG,
+            fg=T.TEXT, font=T.FONT_SECTION, anchor="e",
+        ).grid(row=0, column=0, sticky="ew")
+        tk.Label(
+            intro, text="اطلاعات را بررسی کنید؛ موجودی پس از ثبت به‌روزرسانی می‌شود.",
+            bg=T.CARD_BG, fg=T.TEXT_MUTED, font=T.FONT_SMALL, anchor="e",
+        ).grid(row=1, column=0, sticky="ew", pady=(3, 0))
+
+        # Transaction type
+        type_box = tk.Frame(
+            self, bg=T.BG, highlightbackground=T.CARD_BORDER,
+            highlightthickness=1, padx=12, pady=9,
+        )
+        type_box.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+        type_box.columnconfigure(1, weight=1)
+        tk.Label(
+            type_box, text="نوع گردش", bg=T.BG, fg=T.TEXT,
+            font=T.FONT_BOLD, anchor="e",
+        ).grid(row=0, column=2, sticky="e", padx=(10, 0))
         default_type = next(iter(TYPES), "IN")
         self.type_var = tk.StringVar(value=default_type)
-        rf = ttk.Frame(self)
-        rf.grid(row=0, column=1, sticky="w")
+        radio_frame = tk.Frame(type_box, bg=T.BG)
+        radio_frame.grid(row=0, column=1, sticky="e")
         for k, v in TYPES.items():
-            ttk.Radiobutton(rf, text=v, variable=self.type_var, value=k).pack(
-                side=tk.LEFT, padx=6
-            )
+            ttk.Radiobutton(
+                radio_frame, text=v, variable=self.type_var, value=k,
+            ).pack(side=tk.RIGHT, padx=(0, 12))
 
-        ttk.Label(self, text="کالا:").grid(row=1, column=0, sticky="e", padx=4, pady=4)
+        # Product selector
+        tk.Label(
+            self, text="کالا *", bg=T.CARD_BG, fg=T.TEXT,
+            font=T.FONT_BOLD, anchor="e",
+        ).grid(row=2, column=0, sticky="e", pady=(0, 5))
         self.prod_var = tk.StringVar()
         self.combo = ttk.Combobox(
-            self, textvariable=self.prod_var, state="readonly", width=42
+            self, textvariable=self.prod_var, state="readonly",
+            font=T.FONT, height=14,
         )
-        self.combo.grid(row=1, column=1, sticky="w", pady=4)
+        self.combo.grid(row=3, column=0, sticky="ew", ipady=4, pady=(0, 10))
         self.combo.bind("<<ComboboxSelected>>", self._on_select)
 
-        self.info = tk.Label(
-            self,
-            text=self.INFO_EMPTY,
-            font=T.FONT,
-            fg=T.TEXT_MUTED,
-            bg=T.CARD_BG,
-            anchor="w",
+        # Live stock information panel
+        self.stock_panel = tk.Frame(
+            self, bg="#F0F9FA", highlightbackground="#B8E2E5",
+            highlightthickness=1, padx=12, pady=10,
         )
-        self.info.grid(row=2, column=0, columnspan=2, sticky="ew", padx=4, pady=2)
+        self.stock_panel.grid(row=4, column=0, sticky="ew", pady=(0, 12))
+        self.stock_panel.columnconfigure(0, weight=1)
+        tk.Label(
+            self.stock_panel, text="وضعیت کالا", bg="#F0F9FA",
+            fg=T.PRIMARY, font=T.FONT_BOLD, anchor="e",
+        ).grid(row=0, column=0, sticky="ew")
+        self.info = tk.Label(
+            self.stock_panel, text=self.INFO_EMPTY, font=T.FONT_SMALL,
+            fg=T.TEXT_MUTED, bg="#F0F9FA", anchor="e", justify="right",
+            wraplength=620,
+        )
+        self.info.grid(row=1, column=0, sticky="ew", pady=(4, 0))
 
-        ttk.Label(self, text="مقدار:").grid(row=3, column=0, sticky="e", padx=4, pady=4)
+        # Compact two-column input area
+        fields = tk.Frame(self, bg=T.CARD_BG)
+        fields.grid(row=5, column=0, sticky="ew")
+        fields.columnconfigure(0, weight=1, uniform="transaction_fields")
+        fields.columnconfigure(1, weight=1, uniform="transaction_fields")
+
+        tk.Label(
+            fields, text="مقدار *", bg=T.CARD_BG, fg=T.TEXT,
+            font=T.FONT_BOLD, anchor="e",
+        ).grid(row=0, column=0, sticky="ew", padx=(8, 0), pady=(0, 5))
+        tk.Label(
+            fields, text="تاریخ شمسی *", bg=T.CARD_BG, fg=T.TEXT,
+            font=T.FONT_BOLD, anchor="e",
+        ).grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=(0, 5))
+
         self.qty_var = tk.StringVar()
-        self._qty_entry = ttk.Entry(self, textvariable=self.qty_var, width=14)
-        self._qty_entry.grid(row=3, column=1, sticky="w", pady=4)
+        self._qty_entry = ttk.Entry(
+            fields, textvariable=self.qty_var, justify="right",
+        )
+        self._qty_entry.grid(
+            row=1, column=0, sticky="ew", padx=(8, 0), ipady=4, pady=(0, 10)
+        )
         self._qty_entry.bind("<Return>", lambda _e: self._submit())
 
-        ttk.Label(self, text="تاریخ خورشیدی (سال/ماه/روز):").grid(
-            row=4, column=0, sticky="e", padx=4, pady=4
-        )
         self.date_var = tk.StringVar(value=today_jalali())
-        self._date_entry = ttk.Entry(self, textvariable=self.date_var, width=14)
-        self._date_entry.grid(row=4, column=1, sticky="w", pady=4)
+        self._date_entry = ttk.Entry(
+            fields, textvariable=self.date_var, justify="right",
+        )
+        self._date_entry.grid(
+            row=1, column=1, sticky="ew", padx=(0, 8), ipady=4, pady=(0, 10)
+        )
         self._date_entry.bind("<Return>", lambda _e: self._submit())
 
-        ttk.Label(self, text="توضیح:").grid(row=5, column=0, sticky="e", padx=4, pady=4)
+        tk.Label(
+            self, text="توضیحات / شماره سند", bg=T.CARD_BG, fg=T.TEXT,
+            font=T.FONT_BOLD, anchor="e",
+        ).grid(row=6, column=0, sticky="e", pady=(0, 5))
         self.note_var = tk.StringVar()
-        self._note_entry = ttk.Entry(self, textvariable=self.note_var, width=42)
-        self._note_entry.grid(row=5, column=1, sticky="w", pady=4)
+        self._note_entry = ttk.Entry(
+            self, textvariable=self.note_var,
+            justify="right",
+        )
+        self._note_entry.grid(row=7, column=0, sticky="ew", ipady=4)
         self._note_entry.bind("<Return>", lambda _e: self._submit())
 
-        bf = ttk.Frame(self)
-        bf.grid(row=6, column=0, columnspan=2, pady=10)
+        # Actions
+        ttk.Separator(self, orient="horizontal").grid(
+            row=8, column=0, sticky="ew", pady=(14, 10)
+        )
+        actions = ttk.Frame(self)
+        actions.grid(row=9, column=0, sticky="ew")
+        actions.columnconfigure(0, weight=1)
         ttk.Button(
-            bf, text="ثبت تراکنش", style="Primary.TButton",
-            command=self._submit, width=14,
-        ).pack(side=tk.LEFT, padx=4)
+            actions, text="✓  ثبت تراکنش", style="Primary.TButton",
+            command=self._submit,
+        ).grid(row=0, column=2, padx=(6, 0), sticky="e")
         ttk.Button(
-            bf, text="پاک کردن", style="Secondary.TButton",
-            command=self._clear, width=10,
-        ).pack(side=tk.LEFT, padx=4)
+            actions, text="پاک کردن فرم", style="Secondary.TButton",
+            command=self._clear,
+        ).grid(row=0, column=1, padx=6, sticky="e")
         ttk.Button(
-            bf,
-            text="فهرست و کدگذاری کالا",
-            style="Secondary.TButton",
+            actions, text="مدیریت کالاها", style="Ghost.TButton",
             command=self._manage_products,
-        ).pack(side=tk.LEFT, padx=4)
+        ).grid(row=0, column=0, sticky="w")
 
     # -------------------------------------------------------------- selection
 
@@ -156,10 +223,12 @@ class TransactionForm(ttk.LabelFrame):
             if p.is_low()
             else T.STOCK_OK
         )
+        status = "بحرانی" if p.is_critical() else "کم" if p.is_low() else "مناسب"
         self.info.config(
             text=(
-                f"موجودی: {p.stock:g}  |  واحد: {p.unit}  |  "
-                f"حداقل: {p.min_stock:g}  |  قفسه: {p.shelf or '—'}"
+                f"موجودی فعلی: {p.stock:g} {p.unit}   •   "
+                f"حداقل موجودی: {p.min_stock:g}   •   "
+                f"قفسه: {p.shelf or '—'}   •   وضعیت: {status}"
             ),
             fg=color,
         )
