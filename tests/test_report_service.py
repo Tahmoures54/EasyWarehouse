@@ -60,3 +60,49 @@ def test_csv_export_uses_excel_friendly_utf8_bom(tmp_path):
     assert path.exists()
     assert path.read_bytes().startswith(b"\xef\xbb\xbf")
     assert "مهره" in path.read_text(encoding="utf-8-sig")
+
+
+def test_kardex_running_balance_and_opening_balance(tmp_path):
+    _, products, transactions, reports = _services(tmp_path)
+    product = products.add("کابل برق")
+    transactions.add(product.code, "IN", 20, "2026-10-01", "ورود اولیه")
+    transactions.add(product.code, "OUT", 6, "2026-10-03", "مصرف")
+    transactions.add(product.code, "RETURN", 2, "2026-10-04", "عودت")
+    transactions.add(product.code, "OUT", 3, "2026-10-07", "مصرف دوم")
+
+    rows = reports.kardex_rows(product.code, "2026-10-03", "2026-10-07")
+    assert [r["type"] for r in rows] == [
+        "مانده ابتدای دوره", "خروج", "عودت", "خروج"
+    ]
+    assert [r["balance"] for r in rows] == [20, 14, 16, 13]
+    assert rows[1]["outgoing"] == 6
+    assert rows[2]["incoming"] == 2
+
+
+def test_kardex_accepts_user_code_and_exports_csv(tmp_path):
+    _, products, transactions, reports = _services(tmp_path)
+    product = products.add("فیلتر", user_code="FLT-1")
+    transactions.add(product.code, "IN", 4, "2026-10-01")
+    rows = reports.kardex_rows("FLT-1")
+    assert rows[-1]["balance"] == 4
+    path = reports.export_kardex_csv(tmp_path / "kardex.csv", "FLT-1")
+    assert path.exists()
+    assert path.read_bytes().startswith(b"\\xef\\xbb\\xbf")
+
+
+def test_kardex_rejects_unknown_product_and_reversed_dates(tmp_path):
+    _, _, _, reports = _services(tmp_path)
+    try:
+        reports.kardex_rows("MISSING")
+    except ValueError as exc:
+        assert "یافت نشد" in str(exc)
+    else:
+        raise AssertionError("unknown product should be rejected")
+
+    product = _services(tmp_path)[1].add("واشر")
+    try:
+        reports.kardex_rows(product.code, "2026-10-10", "2026-10-01")
+    except ValueError as exc:
+        assert "تاریخ شروع" in str(exc)
+    else:
+        raise AssertionError("reversed date range should be rejected")
