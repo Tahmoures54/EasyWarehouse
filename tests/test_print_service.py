@@ -28,6 +28,8 @@ def test_receipt_print_contains_persian_date_and_document_number():
     assert "1405/07/29" in html
     assert "A-17" in html
     assert "اپراتور" in html
+    assert "function(){ window.print(); }" in html
+    assert "function(){{" not in html
 
 
 def test_outgoing_transaction_is_dispatch_voucher():
