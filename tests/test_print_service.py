@@ -17,6 +17,11 @@ def _tx(type_="IN", note="تحویل <آزمایشی>"):
         qty=2.5,
         unit="بسته",
         note=note,
+        document_no="EW-000017",
+        party_name="تأمین‌کننده نمونه",
+        delivered_by="علی",
+        received_by="انباردار",
+        reference_no="PO-17",
         type_fa=lambda: {"IN": "ورود", "OUT": "خروج", "RETURN": "عودت"}[type_],
     )
 
@@ -28,6 +33,10 @@ def test_receipt_print_contains_persian_date_and_document_number():
     assert "1405/07/29" in html
     assert "A-17" in html
     assert "اپراتور" in html
+    assert "تأمین‌کننده نمونه" in html
+    assert "تحویل‌دهنده" in html
+    assert "تحویل‌گیرنده" in html
+    assert "PO-17" in html
     assert "function(){ window.print(); }" in html
     assert "function(){{" not in html
 
