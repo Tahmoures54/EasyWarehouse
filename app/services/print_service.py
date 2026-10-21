@@ -84,7 +84,7 @@ button {{ border: 0; border-radius: 5px; padding: 10px 16px; cursor: pointer; ba
 </section>
 <div class="footer">این سند از گردش ثبت‌شده در EasyWarehouse تولید شده است. شماره سند از شناسه داخلی گردش ساخته شده و در دیتابیس تغییر ایجاد نمی‌کند.</div>
 </main>
-<script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 350); });</script>
+<script>window.addEventListener('load', function(){{ setTimeout(function(){{ window.print(); }}, 350); }});</script>
 </body></html>"""
 
 
