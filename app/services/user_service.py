@@ -126,7 +126,7 @@ class UserService:
         )
         if row is None:
             # هزینهٔ ثابت تقریبی برای نام‌های کاربری ناشناخته
-            self._password_material(password, b"easywarehouse-dummy-salt")
+            self._password_material(password, b"anbardari-asan-dummy-salt")
             self.log_event(username, "login_failed", "نام کاربری ناشناخته")
             return None
         now = self._now()
