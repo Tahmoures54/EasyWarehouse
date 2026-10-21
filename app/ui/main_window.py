@@ -699,6 +699,7 @@ class MainWindow(tk.Tk):
         try:
             rows = self.ts.search(query=query, limit=5000) if query else self.ts.all(limit=_TX_LOAD_LIMIT)
             self.table.load(rows)
+            self.table.filter("")
             self.status_var.set(f"جست‌وجو: {len(rows):,} گردش" if query else f"نمایش آخرین {len(rows):,} گردش")
         except Exception as exc:
             logger.exception("Historical transaction search failed")
