@@ -9,6 +9,7 @@ from typing import Iterable, Optional, Sequence, Tuple
 
 from app.models.transaction import Transaction
 from app.ui import theme as T
+from app.utils.date_utils import to_jalali
 
 
 class TxTable(ttk.Frame):
@@ -117,6 +118,7 @@ class TxTable(ttk.Frame):
         return " ".join((
             str(tx.id),
             str(tx.date),
+            _display_date(tx.date),
             str(tx.user_code or tx.code or ""),
             tx.name or "",
             tx.type_fa(),
@@ -129,7 +131,7 @@ class TxTable(ttk.Frame):
     def _row_values(tx: Transaction) -> tuple:
         return (
             tx.id,
-            tx.date,
+            _display_date(tx.date),
             tx.user_code or tx.code or "",
             tx.name or "",
             tx.type_fa(),
@@ -146,3 +148,11 @@ class TxTable(ttk.Frame):
         # باید ترتیب را برعکس کنید تا رنگ نوع پنهان نشود.
         zebra = "odd" if index % 2 else "even"
         return (tx.type, zebra)
+
+
+def _display_date(value: str) -> str:
+    """تاریخ ذخیره‌شدهٔ میلادی را برای نمایش به خورشیدی تبدیل می‌کند."""
+    try:
+        return to_jalali(value)
+    except ValueError:
+        return value
