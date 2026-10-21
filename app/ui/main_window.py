@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import tkinter as tk
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, Callable, Optional
@@ -402,18 +403,54 @@ class MainWindow(tk.Tk):
         ).pack(fill=tk.X, pady=(9, 0))
 
     def _build_status_bar(self) -> None:
-        status = ttk.Frame(self, style="Status.TFrame", padding=(12, 6))
+        """نوار وضعیت شامل وضعیت برنامه، مسیر دیتابیس و معرفی کوتاه توسعه‌دهنده."""
+        status = ttk.Frame(self, style="Status.TFrame", padding=(10, 5))
         status.pack(fill=tk.X, side=tk.BOTTOM)
+
         self.status_var = tk.StringVar(value="آماده")
-        ttk.Label(status, textvariable=self.status_var, style="Status.TLabel").pack(
-            side=tk.LEFT
-        )
+        ttk.Label(
+            status, textvariable=self.status_var, style="Status.TLabel"
+        ).pack(side=tk.LEFT, padx=(0, 10))
+
         ttk.Label(
             status, text="ذخیره‌سازی محلی و خودکار", style="Status.TLabel"
-        ).pack(side=tk.RIGHT, padx=(0, 12))
+        ).pack(side=tk.RIGHT, padx=(10, 0))
+
+        # مسیر واقعی مورد استفاده برنامه؛ در صورت طولانی بودن، متن قابل انتخاب نیست
+        # اما مسیر کامل در خود نوار وضعیت باقی می‌ماند.
         ttk.Label(
-            status, text=f"پایگاه داده: {get_db_path()}", style="Status.TLabel"
-        ).pack(side=tk.RIGHT)
+            status,
+            text=f"پایگاه داده: {get_db_path()}",
+            style="Status.TLabel",
+        ).pack(side=tk.RIGHT, padx=(0, 10))
+
+        developer_ad = ttk.Label(
+            status,
+            text="طراحی و توسعه نرم‌افزار | تماس: 0916 068 4552",
+            style="Status.TLabel",
+            cursor="hand2",
+        )
+        developer_ad.pack(side=tk.RIGHT, padx=(0, 12))
+        developer_ad.bind(
+            "<Button-1>",
+            lambda _event: self._contact_developer(),
+        )
+        developer_ad.bind(
+            "<Enter>",
+            lambda _event: developer_ad.configure(foreground=T.PRIMARY),
+        )
+        developer_ad.bind(
+            "<Leave>",
+            lambda _event: developer_ad.configure(foreground=""),
+        )
+
+    @staticmethod
+    def _contact_developer() -> None:
+        """راه تماس را باز می‌کند؛ شماره نیز برای تماس دستی نمایش داده می‌شود."""
+        try:
+            webbrowser.open("https://wa.me/989160684552")
+        except Exception:
+            logger.exception("Could not open developer contact link")
 
     # --------------------------------------------------------------- shortcuts
 
