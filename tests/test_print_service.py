@@ -55,6 +55,7 @@ def test_kardex_print_filters_rows_and_escapes_text():
     assert "کاردکس کالا" in html
     assert "EW-000002" in html
     assert "EW-000001" not in html
-    assert "&lt;script&gt;bad()&lt;/script&gt;" not in html
+    assert "&lt;script&gt;bad()&lt;/script&gt;" in html
+    assert "<script>bad()</script>" not in html
     assert "&lt;نمونه&gt;" in html
     assert "مانده پایان دوره: 11" in html
