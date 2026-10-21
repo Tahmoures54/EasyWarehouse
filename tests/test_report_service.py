@@ -85,9 +85,15 @@ def test_kardex_accepts_user_code_and_exports_csv(tmp_path):
     transactions.add(product.code, "IN", 4, "2026-10-01")
     rows = reports.kardex_rows("FLT-1")
     assert rows[-1]["balance"] == 4
+    assert rows[-1]["code"] == "FLT-1"
+    assert rows[-1]["name"] == "فیلتر"
     path = reports.export_kardex_csv(tmp_path / "kardex.csv", "FLT-1")
     assert path.exists()
-    assert path.read_bytes().startswith(b"\\xef\\xbb\\xbf")
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+    exported = path.read_text(encoding="utf-8-sig")
+    assert "code,name" in exported.splitlines()[0]
+    assert "FLT-1" in exported
+    assert "فیلتر" in exported
 
 
 def test_kardex_rejects_unknown_product_and_reversed_dates(tmp_path):
