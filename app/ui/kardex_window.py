@@ -53,10 +53,10 @@ class KardexWindow(tk.Toplevel):
 
         body = ttk.Frame(self, padding=(12, 0, 12, 8))
         body.pack(fill=tk.BOTH, expand=True)
-        cols = ("id", "date", "type", "incoming", "outgoing", "balance", "unit", "note")
+        cols = ("id", "document_no", "date", "type", "incoming", "outgoing", "balance", "unit", "note")
         self.tree = ttk.Treeview(body, columns=cols, show="headings")
-        heads = ("شماره گردش", "تاریخ", "شرح", "ورود", "خروج", "مانده", "واحد", "توضیحات")
-        widths = (85, 100, 130, 75, 75, 85, 70, 260)
+        heads = ("شماره گردش", "شماره سند", "تاریخ", "شرح", "ورود", "خروج", "مانده", "واحد", "توضیحات")
+        widths = (75, 95, 95, 120, 70, 70, 80, 60, 230)
         for col, head, width in zip(cols, heads, widths):
             self.tree.heading(col, text=head)
             self.tree.column(col, width=width, minwidth=55, anchor="center")
@@ -96,7 +96,7 @@ class KardexWindow(tk.Toplevel):
                 except (ValueError, TypeError):
                     date_label = row["date"]
                 self.tree.insert("", tk.END, values=(
-                    row["id"], date_label, row["type"],
+                    row["id"], row.get("document_no", ""), date_label, row["type"],
                     f'{row["incoming"]:g}', f'{row["outgoing"]:g}',
                     f'{row["balance"]:g}', row["unit"], row["note"]
                 ))
