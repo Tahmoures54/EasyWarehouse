@@ -4,8 +4,8 @@ cd "$(dirname "$0")/.."
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pyinstaller --noconfirm --onefile --windowed --name EasyWarehouse \
+pyinstaller --noconfirm --onefile --windowed --name AnbardariAsan \
   --add-data "app/database/schema.sql:app/database" \
   --add-data "assets:assets" \
   app/main.py
-echo "Output: dist/EasyWarehouse"
+echo "Output: dist/AnbardariAsan"
