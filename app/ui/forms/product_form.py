@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""فرم افزودن/ویرایش کالا."""
+"""فرم افزودن/ویرایش کالا — چیدمان کارتی با هدر ثابت شامل دکمه‌ها."""
 
 from __future__ import annotations
 
@@ -16,13 +16,20 @@ from app.ui import theme as T
 logger = logging.getLogger(__name__)
 
 
+def _tok(name: str, default):
+    """دریافت توکن تم با مقدار پیش‌فرض در صورت نبود."""
+    return getattr(T, name, default)
+
+
 class ProductForm(tk.Toplevel):
     """دیالوگ افزودن یا ویرایش کالا."""
 
-    WIDTH = 520
-    HEIGHT = 500
-    MIN_WIDTH = 460
-    MIN_HEIGHT = 390
+    # اندازهٔ ترجیحی؛ اگر محتوا بزرگ‌تر باشد، بزرگ‌تر می‌شود.
+    PREFERRED_WIDTH = 640
+    PREFERRED_HEIGHT = 600
+    ABSOLUTE_MIN_WIDTH = 480
+    ABSOLUTE_MIN_HEIGHT = 400
+    STATUS_CLEAR_MS = 4000
 
     def __init__(
         self,
@@ -33,11 +40,15 @@ class ProductForm(tk.Toplevel):
         initial_user_code: str = "",
     ) -> None:
         super().__init__(master)
+        logger.info("ProductForm opening (product=%r)", product)
+
         self.service = service
         self.product = product
         self.on_save = on_save
+        self._saving = False
+        self._status_after_id: Optional[str] = None
 
-        # --- متغیرها ابتدا ساخته می‌شوند تا _save هرگز به متغیر نبوده برنخورد ---
+        # متغیرها قبل از ساخت ویجت‌ها
         self.user_code_var = tk.StringVar(value=initial_user_code)
         self.name_var = tk.StringVar()
         self.unit_var = tk.StringVar(value="عدد")
@@ -45,109 +56,265 @@ class ProductForm(tk.Toplevel):
         self.cat_var = tk.StringVar(value="مصرفی")
         self.shelf_var = tk.StringVar()
 
-        self._configure_window(master)
+        # تنظیمات پایه پنجره
+        self.title("ویرایش کالا" if self.product else "کالای جدید")
+        self.configure(bg=_tok("BG", "#F3F4F6"))
+
+        # ۱) ساخت فرم — قبل از هر geometry
         self._build_form()
         if product is not None:
             self._load_product(product)
         self._bind_shortcuts()
 
-    # ------------------------------------------------------------------ setup
+        # ۲) اندازه‌گیری و تنظیم اندازه بر اساس محتوای واقعی
+        self._fit_to_content(master)
 
-    def _configure_window(self, master: tk.Misc) -> None:
-        self.title("ویرایش کالا" if self.product else "کالای جدید")
-        self.resizable(True, True)
-        self.configure(bg=T.BG)
-        self.transient(master)
-        self._center_on(master)
+        # ۳) نمایش و فوکوس
+        self.lift()
         self.grab_set()
+        self._focus_initial()
 
-    def _center_on(self, master: tk.Misc) -> None:
+    # ------------------------------------------------------------ window
+
+    def _fit_to_content(self, master: tk.Misc) -> None:
+        """تعیین اندازه و مرکز پس از ساخت ویجت‌ها.
+
+        نکته: update_idletasks() باعث می‌شود winfo_reqwidth/height
+        مقادیر واقعی محتوا را برگردانند.
+        """
         self.update_idletasks()
+
+        req_w = self.winfo_reqwidth()
+        req_h = self.winfo_reqheight()
+        sw = max(self.winfo_screenwidth(), 1)
+        sh = max(self.winfo_screenheight(), 1)
+
+        # حداکثر اندازه: صفحه منها حاشیه
+        max_w = max(sw - 80, self.ABSOLUTE_MIN_WIDTH)
+        max_h = max(sh - 140, self.ABSOLUTE_MIN_HEIGHT)
+
+        # اندازهٔ اولیه: بزرگ‌تر از ترجیحی و نیاز محتوا، ولی محدود به صفحه
+        w = min(max(req_w, self.PREFERRED_WIDTH), max_w)
+        h = min(max(req_h, self.PREFERRED_HEIGHT), max_h)
+
+        # مرکز کردن
         try:
-            mx, my = master.winfo_rootx(), master.winfo_rooty()
-            mw, mh = master.winfo_width(), master.winfo_height()
+            mx = master.winfo_rootx()
+            my = master.winfo_rooty()
+            mw = master.winfo_width()
+            mh = master.winfo_height()
         except tk.TclError:
             mx = my = mw = mh = 0
 
-        screen_w = max(self.winfo_screenwidth(), 1)
-        screen_h = max(self.winfo_screenheight(), 1)
-        available_w = max(screen_w - 24, 1)
-        available_h = max(screen_h - 80, 1)
-        min_w = min(self.MIN_WIDTH, available_w)
-        min_h = min(self.MIN_HEIGHT, available_h)
-        self.minsize(min_w, min_h)
-        width = max(min(self.WIDTH, available_w), min_w)
-        height = max(min(self.HEIGHT, available_h), min_h)
-
-        if mw <= 1 or mh <= 1:  # والد هنوز نگاشت نشده — مرکز صفحه
-            x = (screen_w - width) // 2
-            y = (screen_h - height) // 2
+        if mw > 1 and mh > 1:
+            x = mx + (mw - w) // 2
+            y = my + (mh - h) // 2
         else:
-            x = mx + (mw - width) // 2
-            y = my + (mh - height) // 2
-            x = min(max(x, 0), max(screen_w - width, 0))
-            y = min(max(y, 0), max(screen_h - height, 0))
-        self.geometry(f"{width}x{height}+{max(x, 0)}+{max(y, 0)}")
+            x = (sw - w) // 2
+            y = (sh - h) // 2
+
+        x = max(0, min(x, max(sw - w, 0)))
+        y = max(0, min(y, max(sh - h, 0)))
+
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        self.resizable(True, True)
+        self.minsize(
+            min(req_w, max_w) if req_w > 0 else self.ABSOLUTE_MIN_WIDTH,
+            min(req_h, max_h) if req_h > 0 else self.ABSOLUTE_MIN_HEIGHT,
+        )
+
+        logger.info(
+            "ProductForm geometry: req=%dx%d, set=%dx%d, screen=%dx%d",
+            req_w, req_h, w, h, sw, sh,
+        )
 
     def _bind_shortcuts(self) -> None:
         self.bind("<Escape>", lambda _e: self.destroy())
+        self.bind("<Control-s>", lambda _e: self._save())
+        self.bind("<Control-S>", lambda _e: self._save())
 
-    # ----------------------------------------------------------------- layout
+    def _focus_initial(self) -> None:
+        target = (
+            self._name_entry
+            if self.user_code_var.get().strip()
+            else self._code_entry
+        )
+        try:
+            target.focus_set()
+        except tk.TclError:
+            pass
+
+    # ------------------------------------------------------------ layout
 
     def _build_form(self) -> None:
-        # نوار عملیات مستقل از محتوای فرم است تا با تغییر اندازه پنجره
-        # یا مقیاس‌بندی ویندوز، دکمه‌ها پایین پنجره قابل مشاهده بمانند.
-        buttons = ttk.Frame(self, padding=(16, 10))
-        buttons.pack(side=tk.BOTTOM, fill=tk.X)
-        ttk.Separator(self, orient="horizontal").pack(side=tk.BOTTOM, fill=tk.X)
+        """ریشه با grid: هدر ثابت (ردیف ۰) + جداکننده (ردیف ۱) + محتوا (ردیف ۲)."""
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)   # header bar — ارتفاع ثابت، هرگز فشرده نمی‌شود
+        self.rowconfigure(1, weight=0)   # separator
+        self.rowconfigure(2, weight=1)   # content — تنها بخش کشسان
 
-        frame = ttk.Frame(self, padding=16)
-        frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        frame.columnconfigure(1, weight=1)
+        # ردیف ۰: هدر شامل عنوان + وضعیت + دکمه‌ها
+        self._build_header_bar().grid(
+            row=0, column=0, sticky="ew", padx=16, pady=(12, 10)
+        )
 
-        self._add_entry(frame, 0, "کد کالا:", self.user_code_var)
-        self._add_entry(frame, 1, "نام کالا:", self.name_var)
+        # ردیف ۱: جداکننده
+        ttk.Separator(self, orient="horizontal").grid(
+            row=1, column=0, sticky="ew"
+        )
 
-        self._add_label(frame, 2, "واحد:")
+        # ردیف ۲: محتوا
+        content = ttk.Frame(self, padding=(16, 12, 16, 12))
+        content.grid(row=2, column=0, sticky="nsew")
+
+        self._build_identity_section(content).pack(fill=tk.X, pady=(0, 10))
+        self._build_classification_section(content).pack(fill=tk.X, pady=(0, 10))
+        self._build_inventory_section(content).pack(fill=tk.X)
+
+    def _build_header_bar(self) -> tk.Frame:
+        """هدر با عنوان (راست)، وضعیت (وسط)، دکمه‌ها (چپ). همیشه در دید."""
+        bg = _tok("BG", "#F3F4F6")
+        bar = tk.Frame(self, bg=bg)
+        bar.columnconfigure(1, weight=1)   # ستون وسط کشسان است
+
+        # ستون ۰: دکمه‌ها (سمت چپ)
+        btns = tk.Frame(bar, bg=bg)
+        btns.grid(row=0, column=0, sticky="w")
+        self._submit_btn = ttk.Button(
+            btns, text="✓  ذخیره", style="Primary.TButton",
+            command=self._save, width=12,
+        )
+        self._submit_btn.pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(
+            btns, text="انصراف", style="Secondary.TButton",
+            command=self.destroy, width=10,
+        ).pack(side=tk.LEFT)
+
+        # ستون ۱: نوار وضعیت (وسط — کشسان)
+        self._status_label = tk.Label(
+            bar, text="",
+            bg=bg, fg=_tok("TEXT_MUTED", "#6B7280"),
+            font=_tok("FONT_SMALL", ("Tahoma", 9)),
+            anchor="e", justify="right", wraplength=300,
+        )
+        self._status_label.grid(row=0, column=1, sticky="ew", padx=(12, 12))
+
+        # ستون ۲: عنوان (سمت راست، RTL)
+        title_frame = tk.Frame(bar, bg=bg)
+        title_frame.grid(row=0, column=2, sticky="e")
+        if self.product is not None:
+            title_text = f"ویرایش «{self.product.name}»"
+        else:
+            title_text = "کالای جدید"
+        tk.Label(
+            title_frame, text=title_text, bg=bg, fg=_tok("TEXT", "#111827"),
+            font=_tok("FONT_SECTION", ("Tahoma", 12, "bold")), anchor="e",
+        ).pack(anchor="e")
+        tk.Label(
+            title_frame, text="مشخصات کالا را وارد کنید.",
+            bg=bg, fg=_tok("TEXT_MUTED", "#6B7280"),
+            font=_tok("FONT_SMALL", ("Tahoma", 9)), anchor="e",
+        ).pack(anchor="e")
+
+        return bar
+
+    def _build_identity_section(self, parent) -> tk.Frame:
+        bg = _tok("CARD_BG", "#FFFFFF")
+        section = tk.Frame(
+            parent, bg=bg,
+            highlightbackground=_tok("CARD_BORDER", "#E5E7EB"),
+            highlightthickness=1, padx=14, pady=10,
+        )
+        section.columnconfigure(1, weight=1)
+
+        tk.Label(
+            section, text="شناسه کالا", bg=bg, fg=_tok("TEXT", "#111827"),
+            font=_tok("FONT_BOLD", ("Tahoma", 10, "bold")), anchor="e",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        self._add_label(section, 1, "کد کالا *")
+        self._code_entry = ttk.Entry(section, textvariable=self.user_code_var)
+        self._code_entry.grid(row=1, column=1, sticky="ew", ipady=3, pady=(0, 6))
+        self._code_entry.bind("<Return>", lambda _e: self._name_entry.focus_set())
+
+        self._add_label(section, 2, "نام کالا *")
+        self._name_entry = ttk.Entry(section, textvariable=self.name_var)
+        self._name_entry.grid(row=2, column=1, sticky="ew", ipady=3, pady=(0, 4))
+        self._name_entry.bind("<Return>", lambda _e: self._save())
+
+        return section
+
+    def _build_classification_section(self, parent) -> tk.Frame:
+        bg = _tok("CARD_BG", "#FFFFFF")
+        section = tk.Frame(
+            parent, bg=bg,
+            highlightbackground=_tok("CARD_BORDER", "#E5E7EB"),
+            highlightthickness=1, padx=14, pady=10,
+        )
+        section.columnconfigure(1, weight=1)
+
+        tk.Label(
+            section, text="واحد و دسته‌بندی", bg=bg, fg=_tok("TEXT", "#111827"),
+            font=_tok("FONT_BOLD", ("Tahoma", 10, "bold")), anchor="e",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        self._add_label(section, 1, "واحد *")
         ttk.Combobox(
-            frame, textvariable=self.unit_var, values=list(UNITS), width=30
-        ).grid(row=2, column=1, sticky="ew", pady=5)
+            section, textvariable=self.unit_var, values=list(UNITS),
+        ).grid(row=1, column=1, sticky="ew", ipady=3, pady=(0, 6))
 
-        self._add_entry(frame, 3, "حداقل موجودی:", self.min_var)
-
-        self._add_label(frame, 4, "دسته:")
+        self._add_label(section, 2, "دسته")
         ttk.Combobox(
-            frame,
-            textvariable=self.cat_var,
-            values=list(CATEGORIES),
+            section, textvariable=self.cat_var, values=list(CATEGORIES),
             state="readonly",
-            width=30,
-        ).grid(row=4, column=1, sticky="ew", pady=5)
+        ).grid(row=2, column=1, sticky="ew", ipady=3, pady=(0, 6))
 
-        self._add_entry(frame, 5, "قفسه:", self.shelf_var)
+        self._add_label(section, 3, "قفسه")
+        shelf_entry = ttk.Entry(section, textvariable=self.shelf_var)
+        shelf_entry.grid(row=3, column=1, sticky="ew", ipady=3, pady=(0, 4))
+        shelf_entry.bind("<Return>", lambda _e: self._save())
 
-        ttk.Button(
-            buttons, text="ذخیره", style="Primary.TButton", command=self._save, width=12
-        ).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(
-            buttons, text="انصراف", style="Secondary.TButton", command=self.destroy, width=10
-        ).pack(side=tk.RIGHT, padx=6)
+        return section
 
-    def _add_label(self, parent: ttk.Frame, row: int, text: str) -> ttk.Label:
-        label = ttk.Label(parent, text=text)
-        label.grid(row=row, column=0, sticky="e", pady=5, padx=4)
+    def _build_inventory_section(self, parent) -> tk.Frame:
+        bg = _tok("CARD_BG", "#FFFFFF")
+        section = tk.Frame(
+            parent, bg=bg,
+            highlightbackground=_tok("CARD_BORDER", "#E5E7EB"),
+            highlightthickness=1, padx=14, pady=10,
+        )
+        section.columnconfigure(1, weight=1)
+
+        tk.Label(
+            section, text="موجودی", bg=bg, fg=_tok("TEXT", "#111827"),
+            font=_tok("FONT_BOLD", ("Tahoma", 10, "bold")), anchor="e",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
+        self._add_label(section, 1, "حداقل موجودی")
+        min_entry = ttk.Entry(section, textvariable=self.min_var)
+        min_entry.grid(row=1, column=1, sticky="ew", ipady=3, pady=(0, 4))
+        min_entry.bind("<Return>", lambda _e: self._save())
+
+        tk.Label(
+            section,
+            text="اختیاری — آستانهٔ هشدار خودکار کمبود موجودی (پیش‌فرض: ۰).",
+            bg=bg, fg=_tok("TEXT_MUTED", "#6B7280"),
+            font=_tok("FONT_SMALL", ("Tahoma", 9)),
+            anchor="e", justify="right",
+        ).grid(row=2, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+
+        return section
+
+    def _add_label(self, parent: tk.Frame, row: int, text: str) -> tk.Label:
+        bg = parent.cget("bg")
+        label = tk.Label(
+            parent, text=text, bg=bg, fg=_tok("TEXT", "#111827"),
+            font=_tok("FONT", ("Tahoma", 10)), anchor="e",
+        )
+        label.grid(row=row, column=0, sticky="e", padx=(0, 10), pady=(0, 6))
         return label
 
-    def _add_entry(
-        self, parent: ttk.Frame, row: int, label: str, var: tk.StringVar
-    ) -> ttk.Entry:
-        self._add_label(parent, row, label)
-        entry = ttk.Entry(parent, textvariable=var, width=30)
-        entry.grid(row=row, column=1, sticky="ew", pady=5)
-        entry.bind("<Return>", lambda _e: self._save())
-        if row == 0:
-            self.after_idle(entry.focus_set)
-        return entry
+    # ------------------------------------------------------------ load
 
     def _load_product(self, product: Product) -> None:
         self.user_code_var.set(product.user_code or product.code)
@@ -157,11 +324,8 @@ class ProductForm(tk.Toplevel):
         self.cat_var.set(product.category)
         self.shelf_var.set(product.shelf)
 
-    # ---------------------------------------------------------------- helpers
-
     @staticmethod
     def _fmt(value: float) -> str:
-        """نمایش فشرده عدد؛ بدون '.0' اضافی."""
         try:
             if float(value).is_integer():
                 return str(int(value))
@@ -171,12 +335,10 @@ class ProductForm(tk.Toplevel):
 
     @staticmethod
     def _coerce_min_stock(raw: str) -> float:
-        """تبدیل ورودی کاربر به عدد غیرمنفی؛ در صورت خطا ValueError با پیام فارسی."""
         text = (raw or "").strip() or "0"
         if text == "0":
             return 0.0
 
-        # import تنبل تا از چرخهٔ وابستگی بین سرویس‌ها جلوگیری شود
         from app.services.transaction_service import parse_positive_qty
 
         try:
@@ -192,23 +354,27 @@ class ProductForm(tk.Toplevel):
             raise ValueError("حداقل موجودی باید عدد غیرمنفی باشد.")
         return value
 
-    # ------------------------------------------------------------------- save
+    # ------------------------------------------------------------ save
 
     def _save(self) -> None:
+        if self._saving:
+            return
         name = self.name_var.get().strip()
         if not name:
-            self._show_error("نام کالا را وارد کنید.")
+            self._set_status("نام کالا را وارد کنید.", "error")
+            self._name_entry.focus_set()
             return
 
         user_code = self.user_code_var.get().strip()
         if not user_code:
-            self._show_error("کد کالا را وارد کنید.")
+            self._set_status("کد کالا را وارد کنید.", "error")
+            self._code_entry.focus_set()
             return
 
         try:
             min_stock = self._coerce_min_stock(self.min_var.get())
         except ValueError as exc:
-            self._show_error(str(exc))
+            self._set_status(str(exc), "error")
             return
 
         unit = self.unit_var.get().strip() or "عدد"
@@ -224,10 +390,14 @@ class ProductForm(tk.Toplevel):
         ):
             return
 
+        self._saving = True
+        self._submit_btn.state(["disabled"])
+        self._set_status("در حال ذخیره…", "info")
         try:
             if self.product is not None:
                 self.service.update(
-                    self.product.code, name, unit, min_stock, category, shelf, user_code
+                    self.product.code, name, unit, min_stock,
+                    category, shelf, user_code,
                 )
                 message = "کالا ویرایش شد."
             else:
@@ -235,20 +405,45 @@ class ProductForm(tk.Toplevel):
                     name, unit, min_stock, category, shelf, user_code
                 )
                 message = f"کالا با کد «{created.user_code}» ثبت شد."
-        except Exception as exc:  # noqa: BLE001 — نمایش خطای دامنه به کاربر
+        except Exception as exc:  # noqa: BLE001
             logger.exception("Saving product failed")
-            self._show_error(str(exc))
+            self._saving = False
+            self._submit_btn.state(["!disabled"])
+            self._set_status(f"ذخیره ناموفق بود: {exc}", "error")
+            messagebox.showerror("خطا", str(exc), parent=self)
             return
 
+        self._saving = False
+        self._submit_btn.state(["!disabled"])
         messagebox.showinfo("موفق", message, parent=self)
         try:
             if self.on_save is not None:
                 self.on_save()
         except Exception:
-            # خطای refresh والد نباید دیالوگ را باز نگه دارد
             logger.exception("on_save callback failed")
         finally:
             self.destroy()
 
-    def _show_error(self, message: str) -> None:
-        messagebox.showerror("خطا", message, parent=self)
+    # ------------------------------------------------------------ status
+
+    def _set_status(self, text: str, kind: str = "info") -> None:
+        colors = {
+            "info": _tok("TEXT_MUTED", "#6B7280"),
+            "ok": _tok("STOCK_OK", "#10B981"),
+            "warn": _tok("STOCK_LOW", "#F59E0B"),
+            "error": _tok("STOCK_CRIT", "#EF4444"),
+        }
+        self._status_label.config(text=text, fg=colors.get(kind, colors["info"]))
+        if self._status_after_id is not None:
+            try:
+                self.after_cancel(self._status_after_id)
+            except tk.TclError:
+                pass
+            self._status_after_id = None
+        if kind == "ok" and text:
+            def _clear_status():
+                try:
+                    self._set_status("", "info")
+                except tk.TclError:
+                    pass
+            self._status_after_id = self.after(self.STATUS_CLEAR_MS, _clear_status)
