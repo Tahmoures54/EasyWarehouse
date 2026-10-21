@@ -527,8 +527,6 @@ class MainWindow(tk.Tk):
         win.minsize(960, 460)
         win.configure(bg=T.BG)
 
-        tree = self._build_product_tree(win)
-
         search_var = tk.StringVar()
         searchbar = ttk.Frame(win)
         searchbar.pack(fill=tk.X, padx=10, pady=(10, 0))
@@ -553,6 +551,9 @@ class MainWindow(tk.Tk):
             text="اگر کد موجود باشد، کالای ثبت‌شده انتخاب می‌شود.",
             style="Muted.TLabel",
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # جدول پس از نوارهای جست‌وجو ساخته می‌شود تا آن‌ها در پنجره قابل مشاهده بمانند.
+        tree = self._build_product_tree(win)
 
         def reload_and_refresh() -> None:
             self._reload_product_tree(tree, search_var.get())
