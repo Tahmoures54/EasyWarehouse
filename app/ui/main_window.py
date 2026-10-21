@@ -170,6 +170,10 @@ class MainWindow(tk.Tk):
             command=self._export_inventory_count_template,
         )
         report_m.add_command(
+            label="ثبت شمارش و تعدیل موجودی...",
+            command=self._open_stock_adjustment,
+        )
+        report_m.add_command(
             label="کاردکس کالا...",
             command=self._open_kardex,
         )
@@ -1208,6 +1212,13 @@ class MainWindow(tk.Tk):
         self.refresh()
 
     # --------------------------------------------------------------- reports
+
+    def _open_stock_adjustment(self) -> None:
+        """ثبت شمارش فیزیکی و تعدیل قابل ردیابی موجودی."""
+        if not self._require_role("admin", "operator", action="ثبت تعدیل موجودی"):
+            return
+        from app.ui.stock_adjustment_dialog import StockAdjustmentDialog
+        StockAdjustmentDialog(self, self.ps, self.db, self.current_user, on_saved=self.refresh)
 
     def _open_kardex(self) -> None:
         """نمایش گردش کامل و مانده تجمعی یک کالا."""
