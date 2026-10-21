@@ -136,8 +136,40 @@ class ProductForm(tk.Toplevel):
             wraplength=680,
         ).grid(row=1, column=0, sticky="ew", pady=(5, 0))
 
-        body = tk.Frame(self, bg=bg, padx=22, pady=18)
-        body.grid(row=1, column=0, sticky="nsew")
+        # Keep the action footer fixed and make the form body scrollable.
+        # This prevents the save/cancel buttons from being pushed off-screen on
+        # short displays or with Windows display scaling above 100%.
+        body_container = tk.Frame(self, bg=bg)
+        body_container.grid(row=1, column=0, sticky="nsew")
+        body_container.rowconfigure(0, weight=1)
+        body_container.columnconfigure(0, weight=1)
+
+        body_canvas = tk.Canvas(
+            body_container, bg=bg, highlightthickness=0, borderwidth=0
+        )
+        body_scrollbar = ttk.Scrollbar(
+            body_container, orient="vertical", command=body_canvas.yview
+        )
+        body_canvas.configure(yscrollcommand=body_scrollbar.set)
+        body_canvas.grid(row=0, column=0, sticky="nsew")
+        body_scrollbar.grid(row=0, column=1, sticky="ns")
+
+        body = tk.Frame(body_canvas, bg=bg, padx=22, pady=18)
+        body_window = body_canvas.create_window(
+            (0, 0), window=body, anchor="nw"
+        )
+
+        def _update_scroll_region(_event=None):
+            body_canvas.configure(scrollregion=body_canvas.bbox("all"))
+
+        def _fit_body_width(event):
+            body_canvas.itemconfigure(body_window, width=event.width)
+
+        body.bind("<Configure>", _update_scroll_region)
+        body_canvas.bind("<Configure>", _fit_body_width)
+        body_canvas.bind("<MouseWheel>", lambda event: body_canvas.yview_scroll(
+            int(-1 * (event.delta / 120)), "units"
+        ))
         body.columnconfigure(0, weight=1, uniform="form")
         body.columnconfigure(1, weight=1, uniform="form")
 
