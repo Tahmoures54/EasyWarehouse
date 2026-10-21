@@ -269,6 +269,8 @@ class ReportService:
             rows.append({
                 "id": int(tx["id"]),
                 "date": tx["date"],
+                "code": product["user_code"] or internal_code,
+                "name": product["name"] or "",
                 "type": _TYPE_LABELS.get(tx_type, tx_type or ""),
                 "incoming": incoming,
                 "outgoing": outgoing,
@@ -282,6 +284,8 @@ class ReportService:
             rows.insert(0, {
                 "id": "",
                 "date": start,
+                "code": product["user_code"] or internal_code,
+                "name": product["name"] or "",
                 "type": "مانده ابتدای دوره",
                 "incoming": 0.0,
                 "outgoing": 0.0,
@@ -301,7 +305,7 @@ class ReportService:
         return self.export_csv(
             path,
             self.kardex_rows(code, start_date, end_date),
-            fieldnames=("id", "date", "type", "incoming", "outgoing", "balance", "unit", "note"),
+            fieldnames=("id", "date", "code", "name", "type", "incoming", "outgoing", "balance", "unit", "note"),
         )
 
     # ---------------------------------------------------------------- CSV
