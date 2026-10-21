@@ -161,6 +161,10 @@ class MainWindow(tk.Tk):
             label="گزارش گردش تراکنش‌ها (CSV)...",
             command=self._export_transaction_report,
         )
+        report_m.add_command(
+            label="کاردکس کالا...",
+            command=self._open_kardex,
+        )
         report_m.add_separator()
         report_m.add_command(
             label="چاپ رسید / حواله گردش انتخاب‌شده...",
@@ -1196,6 +1200,12 @@ class MainWindow(tk.Tk):
         self.refresh()
 
     # --------------------------------------------------------------- reports
+
+    def _open_kardex(self) -> None:
+        """نمایش گردش کامل و مانده تجمعی یک کالا."""
+        from app.ui.kardex_window import KardexWindow
+
+        KardexWindow(self, self.ps, self.reports)
 
     def _export_inventory_report(self) -> None:
         self._save_report(
