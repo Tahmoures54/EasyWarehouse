@@ -75,14 +75,14 @@ button {{ border: 0; border-radius: 5px; padding: 10px 16px; cursor: pointer; ba
 <body>
 <div class="actions"><button onclick="window.print()">چاپ / ذخیره PDF</button></div>
 <main class="sheet">
-<header><div class="brand">EasyWarehouse | مدیریت انبار</div>
+<header><div class="brand">انبارداری آسان | مدیریت انبار</div>
 <h1>{_safe(title)}</h1><div class="sub">{_safe(doc_label)} · سند قابل ردیابی بر اساس گردش ثبت‌شده</div></header>
 <table><tbody>{rows}</tbody></table>
 <section class="signatures">
 <div class="signature">تحویل‌دهنده<br><br>نام و امضا</div>
 <div class="signature">تحویل‌گیرنده / مسئول انبار<br><br>نام و امضا</div>
 </section>
-<div class="footer">این سند از گردش ثبت‌شده در EasyWarehouse تولید شده است. شماره سند از شناسه داخلی گردش ساخته شده و در دیتابیس تغییر ایجاد نمی‌کند.</div>
+<div class="footer">این سند از گردش ثبت‌شده در انبارداری آسان تولید شده است. شماره سند از شناسه داخلی گردش ساخته شده و در دیتابیس تغییر ایجاد نمی‌کند.</div>
 </main>
 <script>window.addEventListener('load', function(){{ setTimeout(function(){{ window.print(); }}, 350); }});</script>
 </body></html>"""
@@ -143,7 +143,7 @@ button{{padding:8px 14px;background:#087f8c;color:white;border:0;font:inherit;cu
 از تاریخ: {_safe(start_label or "ابتدای سابقه")} | تا تاریخ: {_safe(end_label or "بدون محدودیت")} | فیلتر گردش: {_safe(movement_filter)}</div>
 <div class="summary">مانده ابتدای دوره: {opening:g} {_safe(unit)} | جمع ورود کل دوره: {total_in:g} | جمع خروج کل دوره: {total_out:g} | مانده پایان دوره: {ending:g} {_safe(unit)}</div>
 <table><thead><tr><th>شماره سند</th><th>تاریخ</th><th>شرح</th><th>ورود</th><th>خروج</th><th>مانده</th><th>واحد</th><th>توضیحات</th></tr></thead>
-<tbody>{table_rows}</tbody></table><p>گزارش تولیدشده توسط EasyWarehouse؛ چاپ یا ذخیره PDF از طریق مرورگر انجام می‌شود.</p>
+<tbody>{table_rows}</tbody></table><p>گزارش تولیدشده توسط انبارداری آسان؛ چاپ یا ذخیره PDF از طریق مرورگر انجام می‌شود.</p>
 </body></html>"""
 
 
